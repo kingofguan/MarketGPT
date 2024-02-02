@@ -2,7 +2,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 # import jax
-from functools import partial
+# from functools import partial
 
 
 NA_VAL = -9999

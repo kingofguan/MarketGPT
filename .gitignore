@@ -1,2 +1,7 @@
 # Data stuff
 dataset/raw/*
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
