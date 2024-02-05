@@ -384,6 +384,7 @@ class Message_Tokenizer:
         
         # SIZE
         m.loc[m['size'] > 9999, 'size'] = 9999
+        m.loc[m['oldSize'] > 9999, 'oldSize'] = 9999
         m['size'] = m['size'].astype(int)
 
         # PRICE
@@ -407,11 +408,12 @@ class Message_Tokenizer:
                'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
                'cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice']]
 
-        # TODO: add original message as feature
-        # for all referential order types (2, 3, 4)
+        # add time elements of original message as feature and process NaNs
+        # for all referential order types ('E','C','D','R')
         m = self._add_orig_msg_features(
             m,
-            modif_fields=['price', 'size', 'time_s', 'time_ns'])
+            # modif_fields=['price', 'size', 'time_s', 'time_ns'])
+            modif_fields=['time_s', 'time_ns'])
 
         assert len(m) + 1 == len(b), "length of messages (-1) and book states don't align"
 
@@ -440,8 +442,10 @@ class Message_Tokenizer:
     def _add_orig_msg_features(
             self,
             m,
-            modif_types={2,3,4},
-            modif_fields=['price', 'size', 'time'],
+            modif_types={'E','C','D'},
+            modif_types_special={'R'},
+            modif_fields=['time_s', 'time_ns'],
+            ref_cols = ['cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice'],
             nan_val=-9999
         ):
         """ Changes representation of order cancellation (2) / deletion (3) / execution (4),
@@ -451,18 +455,34 @@ class Message_Tokenizer:
             TODO: lookup missing original message data from previous days' data?
         """
 
+        # make df that converts 'R' values to 'A' values
+        r_m = m.copy()
+        r_m['type'] = r_m['type'].replace('R', 'A')
+
+        # merge changes to modif_types
         m_changes = pd.merge(
-            m.loc[m.event_type.isin(modif_types)].reset_index(),
-            m.loc[m.event_type == 1, ['order_id'] + modif_fields],
-            how='left', on='order_id', suffixes=['', '_ref']).set_index('index')
-        #display(m_changes)
+            m.loc[m.type.isin(modif_types)].reset_index(),
+            r_m.loc[r_m.type == 'A', ['id'] + modif_fields],
+            how='left', on='id', suffixes=['', '_ref']).set_index('index')
+        
+        # merge changes to modif_types_special
+        m_changes_special = pd.merge(
+            m.loc[m.type.isin(modif_types_special)].reset_index(),
+            (r_m.loc[r_m.type == 'A', ['id'] + modif_fields]).rename(columns={'id': 'oldId'}),
+            how='left', on='oldId', suffixes=['', '_ref']).set_index('index')
 
         # add new empty columns for referenced order
         modif_cols = [field + '_ref' for field in modif_fields]
         m[modif_cols] = nan_val
+
         # replace order changes by original order and additional new fields
         m.loc[m_changes.index] = m_changes
+        m.loc[m_changes_special.index] = m_changes_special
         m[modif_cols] = m[modif_cols].fillna(nan_val).astype(int)
+
+        # process other ref fields
+        m[ref_cols] = m[ref_cols].fillna(nan_val).astype(int)
+        
         return m
     
     def _numeric_str(self, num, pad=2):

@@ -65,12 +65,12 @@ def load_message_df(m_f: str) -> pd.DataFrame:
         #     'side': 'int32',
         #     'size': 'int32',
         #     'price': 'int32',
-        #     'cancSize': 'int32',
-        #     'execSize': 'int32',
-        #     'oldId': 'int32',
-        #     'oldSize': 'int32',
-        #     'oldPrice': 'int32',
-        #     'mpid': str
+        #     'cancSize': 'int32', # may be NaN
+        #     'execSize': 'int32', # may be NaN
+        #     'oldId': 'int32', # may be NaN
+        #     'oldSize': 'int32', # may be NaN
+        #     'oldPrice': 'int32', # may be NaN
+        #     'mpid': str # may be NaN
         # }
     )
     # messages.time = messages.time.apply(lambda x: Decimal(x))
@@ -83,6 +83,8 @@ def process_message_files(
         save_dir: str,
         filter_above_lvl: Optional[int] = None,
         skip_existing: bool = False,
+        remove_premarket: bool = True,
+        remove_aftermarket: bool = True,
     ) -> None:
 
     v = Vocab()
@@ -113,8 +115,10 @@ def process_message_files(
         messages = messages.drop(columns=['mpid'])
 
         # remove pre-market and after-market hours from ITCH data
-        messages = messages[messages['time'] >= 34200000000000]
-        messages = messages[messages['time'] <= 57600000000000]
+        if remove_premarket:
+            messages = messages[messages['time'] >= 34200000000000]
+        if remove_aftermarket:
+            messages = messages[messages['time'] <= 57600000000000]
 
         # format time for pre-processing
         messages['time'] = messages['time'].astype('string')
@@ -123,6 +127,28 @@ def process_message_files(
 
         # convert price to pennies from dollars
         messages['price'] = (messages['price'] * 100).astype('int')
+        messages['oldPrice'] = (messages['oldPrice'] * 100) # make int after dealing with NaNs
+
+        # # convert replace 'R' events to cancel 'D' and add 'A' events
+        # rows_list = []
+        # for index, row in messages.iterrows():
+        #     if row['type'] == 'R':
+        #         # create cancel event..
+        #         order_elements = messages.loc[index]
+        #         cancel_dict = {'time': order_elements.time, 'type': 'D', 'id': (order_elements.oldId).astype('int'), 'side': order_elements.side, 'size': 0.0, 'price': (order_elements.oldPrice).astype('int'), 'cancSize': order_elements.oldSize, 'execSize': order_elements.execSize, 'oldId': order_elements.execSize, 'oldSize': order_elements.execSize, 'oldPrice': order_elements.execSize}
+        #         # ..add it to the list
+        #         rows_list.append(cancel_dict)
+                
+        #         # create add event..
+        #         add_dict = {'time': order_elements.time, 'type': 'A', 'id': (order_elements.id).astype('int'), 'side': order_elements.side, 'size': order_elements.size, 'price': (order_elements.price).astype('int'), 'cancSize': order_elements.execSize, 'execSize': order_elements.execSize, 'oldId': order_elements.execSize, 'oldSize': order_elements.execSize, 'oldPrice': order_elements.execSize}
+        #         # ..add it to the list
+        #         rows_list.append(add_dict)
+        #     else:
+        #         # add the original event to the list
+        #         rows_list.append(messages.loc[index].to_dict())
+        # # create a new dataframe from the list
+        # messages = pd.DataFrame(rows_list) # TODO: book files no longer match up with messages... need to fix this
+
         
         print('<< pre processing >>')
         m_ = tok.preproc(messages, book)
