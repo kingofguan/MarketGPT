@@ -163,9 +163,7 @@ def get_price_range_for_level(
     ) -> pd.DataFrame:
     assert lvl > 0
     assert lvl <= (book.shape[1] // 4)
-    # p_range = book[[(lvl-1) * 4, (lvl-1) * 4 + 2]]
     p_range = book.iloc[:, [(lvl-1) * 4 + 1, (lvl-1) * 4 + 3]] # lvl bid and ask prices
-    # p_range.columns = ['p_max', 'p_min']
     p_range.columns = ['p_min', 'p_max']
     return p_range
 
@@ -188,9 +186,11 @@ def process_book_files(
         save_dir: str,
         n_price_series: int,
         filter_above_lvl: Optional[int] = None,
-        allowed_events=[1, 2, 3, 4],
+        allowed_events=['A','E','C','D','R'],
         skip_existing: bool = False,
         use_raw_book_repr=False,
+        remove_premarket: bool = True,
+        remove_aftermarket: bool = True,
     ) -> None:
 
     for m_f, b_f in tqdm(zip(message_files, book_files)):
@@ -205,25 +205,36 @@ def process_book_files(
 
         book = pd.read_csv(
             b_f,
-            index_col=False,
-            header=None
+            # index_col=False,
+            # header=None
         )
 
+        # remove pre-market and after-market hours from ITCH data
+        if remove_premarket:
+            messages = messages[messages['time'] >= 34200000000000]
+        if remove_aftermarket:
+            messages = messages[messages['time'] <= 57600000000000]
+
         # remove disallowed order types
-        messages = messages.loc[messages.event_type.isin(allowed_events)]
+        messages = messages.loc[messages.type.isin(allowed_events)]
         # make sure book is same length as messages
         book = book.loc[messages.index]
 
         if filter_above_lvl is not None:
             messages, book = filter_by_lvl(messages, book, filter_above_lvl)
 
+        # remove time field from ITCH book data
+        book = book.drop(columns=['time'])
+
+        assert len(messages) == len(book)
+
         # convert to n_price_series separate volume time series (each tick is a price level)
         if not use_raw_book_repr:
             book = process_book(book, price_levels=n_price_series)
         else:
             # prepend delta mid price column to book data
-            p_ref = ((book.iloc[:, 0] + book.iloc[:, 2]) / 2).round(-2).astype(int)
-            mid_diff = p_ref.div(100).diff().fillna(0).astype(int)
+            p_ref = ((book.iloc[:, 0] + book.iloc[:, 2]) / 2).mul(100).round().astype(int)
+            mid_diff = p_ref.diff().fillna(0).astype(int)
             book = np.concatenate((mid_diff.values.reshape(-1,1), book.values), axis=1)
 
         np.save(b_path, book, allow_pickle=True)
@@ -233,17 +244,18 @@ def process_book(
         price_levels: int
     ) -> np.ndarray:
 
-    # mid-price rounded to nearest tick (100)
-    p_ref = ((b.iloc[:, 0] + b.iloc[:, 2]) / 2).round(-2).astype(int)
-    b_indices = b.iloc[:, ::2].sub(p_ref, axis=0).div(100).astype(int)
-    b_indices = b_indices + price_levels // 2
-    b_indices.columns = list(range(b_indices.shape[1]))
-    vol_book = b.iloc[:, 1::2].copy()
+    # mid-price rounded to nearest tick
+    p_ref = ((b.iloc[:, 0] + b.iloc[:, 2]) / 2).mul(100).round().astype(int)
+    b_indices = b.iloc[:, ::2].mul(100).sub(p_ref, axis=0).astype(int)
+    b_indices = b_indices + price_levels // 2 # make tick differences fit between span of 0 to price_levels
+    b_indices.columns = list(range(b_indices.shape[1])) # reset col indices
+    vol_book = b.iloc[:, 1::2].copy().astype(int)
     # convert sell volumes (ask side) to negative
-    vol_book.iloc[:, ::2] = vol_book.iloc[:, ::2].mul(-1)
-    vol_book.columns = list(range(vol_book.shape[1]))
+    vol_book.iloc[:, 1::2] = vol_book.iloc[:, 1::2].mul(-1)
+    vol_book.columns = list(range(vol_book.shape[1])) # reset col indices
 
     # convert to book representation with volume at each price level relative to reference price (mid)
+    # whilst preserving empty levels to maintain sparse representation of book
     # i.e. at each time we have a fixed width snapshot around the mid price
     # therefore movement of the mid price needs to be a separate feature (e.g. relative to previous price)
 
@@ -253,11 +265,13 @@ def process_book(
     for i in range(a.shape[0]):
         for j in range(a.shape[1]):
             price = a[i, j]
+            # remove prices outside of price_levels range
             if price >= 0 and price < price_levels:
                 mybook[i, price] = vol_book.values[i, j]
 
     # prepend column with best bid changes (in ticks)
-    mid_diff = p_ref.div(100).diff().fillna(0).astype(int).values
+    mid_diff = p_ref.diff().fillna(0).astype(int).values
+    # TODO: prepend column with ticker ID
     return np.concatenate([mid_diff[:, None], mybook], axis=1)
 
 if __name__ == '__main__':

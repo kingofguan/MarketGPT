@@ -417,6 +417,7 @@ class Message_Tokenizer:
 
         assert len(m) + 1 == len(b), "length of messages (-1) and book states don't align"
 
+        # TODO: prepend column with ticker ID
         return m.values
 
     def _preproc_prices(self, p, p_ref, p_lower_trunc=-10, p_upper_trunc=13):
@@ -482,7 +483,7 @@ class Message_Tokenizer:
 
         # process other ref fields
         m[ref_cols] = m[ref_cols].fillna(nan_val).astype(int)
-        
+
         return m
     
     def _numeric_str(self, num, pad=2):
