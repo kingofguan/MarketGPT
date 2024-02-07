@@ -80,6 +80,7 @@ def load_message_df(m_f: str) -> pd.DataFrame:
 def process_message_files(
         message_files: list[str],
         book_files: list[str],
+        symbols_file: str,
         save_dir: str,
         filter_above_lvl: Optional[int] = None,
         skip_existing: bool = False,
@@ -90,10 +91,19 @@ def process_message_files(
     v = Vocab()
     tok = Message_Tokenizer()
 
+    # create ticker symbol mapping
+    tickers = {}
+    with open(symbols_file) as f:
+        idx = 0
+        for line in f:
+            idx += 1
+            tickers[line.strip()] = idx
+
     assert len(message_files) == len(book_files)
     for m_f, b_f in tqdm(zip(message_files, book_files)):
         print(m_f)
         m_path = save_dir + m_f.rsplit('/', maxsplit=1)[-1][:-4] + '_proc.npy'
+        symbol = m_f.rsplit('/', maxsplit=1)[-1][:-12].rsplit('_', maxsplit=1)[-1]
         if skip_existing and Path(m_path).exists():
             print('skipping', m_path)
             continue
@@ -153,6 +163,10 @@ def process_message_files(
         print('<< pre processing >>')
         m_ = tok.preproc(messages, book)
 
+        # prepend column with ticker ID
+        ticker_id = tickers[symbol]
+        m_ = np.concatenate([np.full((m_.shape[0], 1), ticker_id), m_], axis=1)
+
         # save processed messages
         np.save(m_path, m_)
         print('saved to', m_path)
@@ -183,6 +197,7 @@ def filter_by_lvl(
 def process_book_files(
         message_files: list[str],
         book_files: list[str],
+        symbols_file: str,
         save_dir: str,
         n_price_series: int,
         filter_above_lvl: Optional[int] = None,
@@ -193,10 +208,20 @@ def process_book_files(
         remove_aftermarket: bool = True,
     ) -> None:
 
+    # create ticker symbol mapping
+    tickers = {}
+    with open(symbols_file) as f:
+        idx = 0
+        for line in f:
+            idx += 1
+            tickers[line.strip()] = idx
+
+    # process and save each book file
     for m_f, b_f in tqdm(zip(message_files, book_files)):
         print(m_f)
         print(b_f)
         b_path = save_dir + b_f.rsplit('/', maxsplit=1)[-1][:-4] + '_proc.npy'
+        symbol = m_f.rsplit('/', maxsplit=1)[-1][:-12].rsplit('_', maxsplit=1)[-1]
         if skip_existing and Path(b_path).exists():
             print('skipping', b_path)
             continue
@@ -237,7 +262,13 @@ def process_book_files(
             mid_diff = p_ref.diff().fillna(0).astype(int)
             book = np.concatenate((mid_diff.values.reshape(-1,1), book.values), axis=1)
 
+        # prepend column with ticker ID
+        ticker_id = tickers[symbol]
+        book = np.concatenate([np.full((book.shape[0], 1), ticker_id), book], axis=1)
+
+        # save processed book
         np.save(b_path, book, allow_pickle=True)
+        print('saved to', b_path)
 
 def process_book(
         b: pd.DataFrame,
@@ -271,13 +302,13 @@ def process_book(
 
     # prepend column with best bid changes (in ticks)
     mid_diff = p_ref.diff().fillna(0).astype(int).values
-    # TODO: prepend column with ticker ID
     return np.concatenate([mid_diff[:, None], mybook], axis=1)
 
 if __name__ == '__main__':
     parent_folder_path, current_dir = os.path.split(os.path.abspath(''))
     load_path = parent_folder_path + '/' + current_dir + '/dataset/raw/ITCH/'
     save_path = parent_folder_path + '/' + current_dir + '/dataset/ITCH/'
+    symbols_load_path = parent_folder_path + '/' + current_dir + '/dataset/symbols/'
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str, default=load_path,
@@ -298,6 +329,7 @@ if __name__ == '__main__':
 
     message_files = sorted(glob(args.data_dir + '*message*.csv'))
     book_files = sorted(glob(args.data_dir + '*book*.csv'))
+    symbols_file = sorted(glob(symbols_load_path + '*sp500*.txt'))[0]
 
     print('found', len(message_files), 'message files')
     print('found', len(book_files), 'book files')
@@ -308,6 +340,7 @@ if __name__ == '__main__':
         process_message_files(
             message_files,
             book_files,
+            symbols_file,
             args.save_dir,
             filter_above_lvl=args.filter_above_lvl,
             skip_existing=args.skip_existing,
@@ -321,6 +354,7 @@ if __name__ == '__main__':
         process_book_files(
             message_files,
             book_files,
+            symbols_file,
             args.save_dir,
             filter_above_lvl=args.filter_above_lvl,
             n_price_series=args.n_tick_range,
