@@ -307,7 +307,7 @@ def process_book(
 if __name__ == '__main__':
     parent_folder_path, current_dir = os.path.split(os.path.abspath(''))
     load_path = parent_folder_path + '/' + current_dir + '/dataset/raw/ITCH/'
-    save_path = parent_folder_path + '/' + current_dir + '/dataset/ITCH/'
+    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/'
     symbols_load_path = parent_folder_path + '/' + current_dir + '/dataset/symbols/'
 
     parser = argparse.ArgumentParser()

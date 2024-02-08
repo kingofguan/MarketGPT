@@ -9,10 +9,9 @@ from tqdm import tqdm
 from glob import glob
 from decimal import Decimal
 # from functools import partial
-# import lob.encoding as encoding
 
-# from lob.encoding import Vocab, Message_Tokenizer
 from equities.data_processing.lobster_encoding import Vocab, Message_Tokenizer
+# from lobster_encoding import Vocab, Message_Tokenizer # TERMINAL
 
 import os
 import sys
@@ -217,7 +216,7 @@ def process_book(
 if __name__ == '__main__':
     parent_folder_path, current_dir = os.path.split(os.path.abspath(''))
     load_path = parent_folder_path + '/' + current_dir + '/dataset/raw/LOBSTER/'
-    save_path = parent_folder_path + '/' + current_dir + '/dataset/LOBSTER/'
+    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/LOBSTER/'
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", type=str, default=load_path,

@@ -117,6 +117,10 @@ def encode_msg(
         price_ref_sign, price_ref, size_ref, time_ref_comb]
     return np.hstack(out) # time_s_ref, time_ns_ref])
 
+# encode_msgs = jax.jit(jax.vmap(encode_msg, in_axes=(0, None)))
+def encode_msgs(msgs, encoding):
+    return [encode_msg(msg, encoding) for msg in msgs]
+
 def encode_time(
         time_s: np.array,
         time_ns: np.array,
@@ -164,6 +168,10 @@ def decode_msg(msg_enc, encoding):
     return np.hstack([ NA_VAL,
         event_type, direction, NA_VAL, price, size, delta_t_s, delta_t_ns, time_s, time_ns,
         price_ref, size_ref, time_s_ref, time_ns_ref])
+
+# decode_msgs = jax.jit(jax.vmap(decode_msg, in_axes=(0,)))
+def decode_msgs(msgs, encoding):
+    return [decode_msg(msg, encoding) for msg in msgs]
 
 def decode_time(time_toks, encoding):
     if time_toks.shape[0] == 0:

@@ -1,5 +1,6 @@
 # Data stuff
 dataset/raw/*
+dataset/proc/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
