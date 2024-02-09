@@ -10,7 +10,7 @@ from glob import glob
 from decimal import Decimal
 # from functools import partial
 
-from equities.data_processing.lobster_encoding import Vocab, Message_Tokenizer
+from equities.data_processing.lobster.lobster_encoding import Vocab, Message_Tokenizer
 # from lobster_encoding import Vocab, Message_Tokenizer # TERMINAL
 
 import os

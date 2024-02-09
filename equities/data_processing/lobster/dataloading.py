@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 from typing import Callable, Optional, TypeVar, Dict, Tuple, List, Union
 from equities.data_processing.base import make_data_loader
-from equities.data_processing.lobster_dataloader import LOBSTER, LOBSTER_Dataset, LOBSTER_Sampler
+from equities.data_processing.lobster.lobster_dataloader import LOBSTER, LOBSTER_Dataset, LOBSTER_Sampler
 
 
 DEFAULT_CACHE_DIR_ROOT = Path('./cache_dir/')

@@ -17,9 +17,9 @@ import pandas as pd
 # import jax.numpy as jnp
 # from jax.nn import one_hot
 
-import equities.data_processing.lobster_encoding as encoding
-from equities.data_processing.lobster_encoding import Vocab, Message_Tokenizer
-from equities.data_processing.lobster_preproc import transform_L2_state
+import equities.data_processing.lobster.lobster_encoding as encoding
+from equities.data_processing.lobster.lobster_encoding import Vocab, Message_Tokenizer
+from equities.data_processing.lobster.lobster_preproc import transform_L2_state
 from equities.data_processing.base import SequenceDataset
 # from s5.utils import permutations
 # default_data_path = Path(__file__).parent.parent.absolute()
@@ -130,16 +130,16 @@ class LOBSTER_Dataset(Dataset):
         msk_i = rng.integers(i_start, i_end)
         # select random token from last message from selected field
         y = seq[-1][msk_i]
-        # seq[-1][msk_i] = Vocab.MASK_TOK
-        seq = seq.at[-1, msk_i].set(Vocab.MASK_TOK)
+        seq[-1][msk_i] = Vocab.MASK_TOK
+        # seq = seq.at[-1, msk_i].set(Vocab.MASK_TOK)
         # set tokens after MSK token to HIDDEN for masked field
         if msk_i < (i_end - 1):
-            # seq[-1][msk_i + 1: i_end] = Vocab.HIDDEN_TOK
-            seq = seq.at[-1, msk_i + 1: i_end].set(Vocab.HIDDEN_TOK)
+            seq[-1][msk_i + 1: i_end] = Vocab.HIDDEN_TOK
+            # seq = seq.at[-1, msk_i + 1: i_end].set(Vocab.HIDDEN_TOK)
         # set all hidden_fields to HIDDEN
         for f in hidden_fields:
-            # seq[-1][slice(*LOBSTER_Dataset._get_tok_slice_i(f))] = Vocab.HIDDEN_TOK
-            seq = seq.at[-1, slice(*LOBSTER_Dataset._get_tok_slice_i(f))].set(Vocab.HIDDEN_TOK)
+            seq[-1][slice(*LOBSTER_Dataset._get_tok_slice_i(f))] = Vocab.HIDDEN_TOK
+            # seq = seq.at[-1, slice(*LOBSTER_Dataset._get_tok_slice_i(f))].set(Vocab.HIDDEN_TOK)
         return seq, y
     
     @staticmethod
@@ -309,9 +309,13 @@ class LOBSTER_Dataset(Dataset):
         seq_end = seq_start + self.n_messages
         
         X_raw = np.array(X[seq_start: seq_end])
+        # print("X_raw.shape=", X_raw.shape)
+        # print("X_raw=", X_raw)
         # encode message
         
         X = encoding.encode_msgs(X_raw, self.vocab.ENCODING)
+        # print("X.shape=", X.shape)
+        # print("X=", X)
 
         # apply mask and extract prediction target token
         X, y = self.mask_fn(X, self.rng)

@@ -119,7 +119,7 @@ def encode_msg(
 
 # encode_msgs = jax.jit(jax.vmap(encode_msg, in_axes=(0, None)))
 def encode_msgs(msgs, encoding):
-    return [encode_msg(msg, encoding) for msg in msgs]
+    return np.array([encode_msg(msg, encoding) for msg in msgs])
 
 def encode_time(
         time_s: np.array,
@@ -171,7 +171,7 @@ def decode_msg(msg_enc, encoding):
 
 # decode_msgs = jax.jit(jax.vmap(decode_msg, in_axes=(0,)))
 def decode_msgs(msgs, encoding):
-    return [decode_msg(msg, encoding) for msg in msgs]
+    return np.array([decode_msg(msg, encoding) for msg in msgs])
 
 def decode_time(time_toks, encoding):
     if time_toks.shape[0] == 0:
