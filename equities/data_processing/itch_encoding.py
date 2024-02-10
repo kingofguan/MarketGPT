@@ -77,6 +77,7 @@ def combine_field(
     #     x)
 
 # event_type	direction	price	size	delta_t	time_s	time_ns	price_ref	size_ref	time_s_ref	time_ns_ref
+# TODO: REIMPLEMENT
 def encode_msg(
         msg: np.array,
         encoding: Dict[str, Tuple[np.array, np.array]],
@@ -117,6 +118,9 @@ def encode_msg(
         price_ref_sign, price_ref, size_ref, time_ref_comb]
     return np.hstack(out) # time_s_ref, time_ns_ref])
 
+def encode_msgs(msgs, encoding):
+    return np.array([encode_msg(msg, encoding) for msg in msgs])
+
 def encode_time(
         time_s: np.array,
         time_ns: np.array,
@@ -137,6 +141,7 @@ def encode_time(
     return time_comb
 
 
+# TODO: REIMPLEMENT
 def decode_msg(msg_enc, encoding):
     # TODO: check if fields with same decoder can be combined into one decode call
 
@@ -165,6 +170,9 @@ def decode_msg(msg_enc, encoding):
         event_type, direction, NA_VAL, price, size, delta_t_s, delta_t_ns, time_s, time_ns,
         price_ref, size_ref, time_s_ref, time_ns_ref])
 
+def decode_msgs(msgs, encoding):
+    return np.array([decode_msg(msg, encoding) for msg in msgs])
+
 def decode_time(time_toks, encoding):
     if time_toks.shape[0] == 0:
         return NA_VAL, NA_VAL
@@ -185,6 +193,7 @@ def decode_time(time_toks, encoding):
 
         return time_s, time_ns
 
+# TODO: REIMPLEMENT
 def repr_raw_msg(msg):
     field_names = ['OID', 'event_type', 'direction', 'price_abs', 'price', 'size',
                    'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
@@ -195,6 +204,7 @@ def repr_raw_msg(msg):
         out += name + ":\t" + str(val) + "\n"
     return out
 
+# TODO: REIMPLEMENT
 class Vocab:
 
     MASK_TOK = 0
@@ -245,6 +255,7 @@ class Vocab:
         self.DECODING_GLOBAL[Vocab.HIDDEN_TOK] = ('generic', 'HID')
         self.DECODING_GLOBAL[Vocab.NA_TOK] = ('generic', 'NAN')
 
+# TODO: REIMPLEMENT
 class Message_Tokenizer:
 
     FIELDS = (
