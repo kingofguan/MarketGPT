@@ -9,6 +9,7 @@ from glob import glob
 from decimal import Decimal
 
 from equities.data_processing.itch_encoding import Vocab, Message_Tokenizer
+# from itch_encoding import Vocab, Message_Tokenizer # TERMINAL
 
 import os
 import sys

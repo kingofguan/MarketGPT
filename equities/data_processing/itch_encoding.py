@@ -76,49 +76,52 @@ def combine_field(
     #     lambda arg: combine_int(arg, tok_len, sign),
     #     x)
 
-# type	side	price	size	delta_t	time_s	time_ns   canc_size_ref	exec_size_ref	old_size_ref old_price_ref	time_s_ref	time_ns_ref
+# ticker	type	side	price	size	delta_t	time_s	time_ns   canc_size_ref	exec_size_ref	old_size_ref old_price_ref	time_s_ref	time_ns_ref
 # TODO: REIMPLEMENT
 def encode_msg(
         msg: np.array,
         encoding: Dict[str, Tuple[np.array, np.array]],
     ) -> np.array:
-    event_type = encode(msg[1], *encoding['type'])
+    ticker = encode(msg[0], *encoding['ticker'])
     
-    direction = encode(msg[2], *encoding['side'])
-    # NOTE: leave out price_abs in msg[3]
-    price = split_field(msg[4], 1, 3, True)
+    # NOTE: leave out id in msg[1]
+    event_type = encode(msg[2], *encoding['type'])
+    
+    direction = encode(msg[3], *encoding['side'])
+    # NOTE: leave out price_abs in msg[4]
+    price = split_field(msg[5], 1, 3, True)
     # CAVE: temporary fix to switch tokens for + and - sign
     price_sign = encode(price[0], *encoding['sign'])
     price = encode(price[1], *encoding['price'])
     
-    size = encode(msg[5], *encoding['size'])
+    size = encode(msg[6], *encoding['size'])
     
     time_comb = encode_time(
-        time_s = msg[8], 
-        time_ns = msg[9],
+        time_s = msg[9], 
+        time_ns = msg[10],
         encoding = encoding,
-        delta_t_s = msg[6],
-        delta_t_ns = msg[7],
+        delta_t_s = msg[7],
+        delta_t_ns = msg[8],
     )
 
-    canc_size_ref = encode(msg[10], *encoding['size'])
-    exec_size_ref = encode(msg[11], *encoding['size'])
-    # NOTE: leave out oldID in msg[12]
-    old_size_ref = encode(msg[13], *encoding['size'])
+    canc_size_ref = encode(msg[11], *encoding['size'])
+    exec_size_ref = encode(msg[12], *encoding['size'])
+    # NOTE: leave out oldID in msg[13]
+    old_size_ref = encode(msg[14], *encoding['size'])
 
-    price_ref = split_field(msg[14], 1, 3, True)
+    price_ref = split_field(msg[15], 1, 3, True)
     # CAVE: temporary fix to switch tokens for + and - sign
     price_ref_sign = encode(price_ref[0], *encoding['sign'])
     price_ref = encode(price_ref[1], *encoding['price'])
 
     time_ref_comb = encode_time(
-        time_s = msg[15], 
-        time_ns = msg[16],
+        time_s = msg[16], 
+        time_ns = msg[17],
         encoding = encoding
     )
 
     out = [
-        event_type, direction, price_sign, price, size, time_comb, # delta_t, time_s, time_ns,
+        ticker, event_type, direction, price_sign, price, size, time_comb, # delta_t, time_s, time_ns,
         canc_size_ref, exec_size_ref, old_size_ref, price_ref_sign, price_ref, time_ref_comb]
     return np.hstack(out) # time_s_ref, time_ns_ref])
 
@@ -149,31 +152,33 @@ def encode_time(
 def decode_msg(msg_enc, encoding):
     # TODO: check if fields with same decoder can be combined into one decode call
 
-    event_type = decode(msg_enc[0], *encoding['type'])
+    ticker = decode(msg_enc[0], *encoding['ticker'])
     
-    direction = decode(msg_enc[1], *encoding['side'])
+    event_type = decode(msg_enc[1], *encoding['type'])
+    
+    direction = decode(msg_enc[2], *encoding['side'])
 
-    price_sign =  decode(msg_enc[2], *encoding['sign'])
-    price = decode(msg_enc[3], *encoding['price'])
+    price_sign =  decode(msg_enc[3], *encoding['sign'])
+    price = decode(msg_enc[4], *encoding['price'])
     price = combine_field(price, 3, price_sign)
 
-    size = decode(msg_enc[4], *encoding['size'])
+    size = decode(msg_enc[5], *encoding['size'])
 
-    delta_t_s, delta_t_ns, time_s, time_ns = decode_time(msg_enc[5:14], encoding)
+    delta_t_s, delta_t_ns, time_s, time_ns = decode_time(msg_enc[6:15], encoding)
 
-    canc_size_ref = decode(msg_enc[14], *encoding['size'])
-    exec_size_ref = decode(msg_enc[15], *encoding['size'])
-    old_size_ref = decode(msg_enc[16], *encoding['size'])
+    canc_size_ref = decode(msg_enc[15], *encoding['size'])
+    exec_size_ref = decode(msg_enc[16], *encoding['size'])
+    old_size_ref = decode(msg_enc[17], *encoding['size'])
 
-    price_ref_sign = decode(msg_enc[17], *encoding['sign'])
-    price_ref = decode(msg_enc[18], *encoding['price'])
+    price_ref_sign = decode(msg_enc[18], *encoding['sign'])
+    price_ref = decode(msg_enc[19], *encoding['price'])
     price_ref = combine_field(price_ref, 3, price_ref_sign)
 
-    time_s_ref, time_ns_ref = decode_time(msg_enc[19:24], encoding)
+    time_s_ref, time_ns_ref = decode_time(msg_enc[20:25], encoding)
 
     # order ID is not encoded, so it's set to NA
     # same for price_abs
-    return np.hstack([ NA_VAL,
+    return np.hstack([ ticker, NA_VAL,
         event_type, direction, NA_VAL, price, size, delta_t_s, delta_t_ns, time_s, time_ns,
         canc_size_ref, exec_size_ref, old_size_ref, price_ref, time_s_ref, time_ns_ref])
 
@@ -202,7 +207,7 @@ def decode_time(time_toks, encoding):
 
 # TODO: REIMPLEMENT
 def repr_raw_msg(msg):
-    field_names = ['id', 'type', 'side', 'price_abs', 'price', 'size',
+    field_names = ['ticker', 'id', 'type', 'side', 'price_abs', 'price', 'size',
                    'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
                    'cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice',
                    'time_s_ref', 'time_ns_ref']
@@ -232,6 +237,7 @@ class Vocab:
         self._add_field('price', range(1000), [1])
         self._add_field('sign', [-1, 1], None)
         self._add_field('side', [0, 1], None)
+        self._add_field('ticker', range(1,504), None) # limit to S&P500 for now
 
     def __len__(self):
         return self.counter
@@ -267,6 +273,7 @@ class Vocab:
 class Message_Tokenizer:
 
     FIELDS = (
+        'ticker',
         'type',
         'side',
         'price',
@@ -283,13 +290,13 @@ class Message_Tokenizer:
         'time_s_ref',
         'time_ns_ref',
     )
-    N_NEW_FIELDS = 8
+    N_NEW_FIELDS = 9
     N_REF_FIELDS = 6
     # note: list comps only work inside function for class variables
     FIELD_I = (lambda fields=FIELDS:{
         f: i for i, f in enumerate(fields)
     })()
-    TOK_LENS = np.array((1, 1, 2, 1, 1, 3, 2, 3, 1, 1, 1, 2, 2, 3))
+    TOK_LENS = np.array((1, 1, 1, 2, 1, 1, 3, 2, 3, 1, 1, 1, 2, 2, 3))
     TOK_DELIM = np.cumsum(TOK_LENS[:-1])
     MSG_LEN = np.sum(TOK_LENS)
     # encoded message length: total length - length of reference fields
@@ -297,6 +304,7 @@ class Message_Tokenizer:
         (lambda tl=TOK_LENS, fields=FIELDS: np.sum(tl[i] for i, f in enumerate(fields) if f.endswith('_ref')))()
     # fields in correct message order:
     FIELD_ENC_TYPES = {
+        'ticker': 'ticker',
         'type': 'type',
         'side': 'side',
         'price': 'price', #'generic',

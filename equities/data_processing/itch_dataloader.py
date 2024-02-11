@@ -14,7 +14,7 @@ import pandas as pd
 
 import equities.data_processing.itch_encoding as encoding
 from equities.data_processing.itch_encoding import Vocab, Message_Tokenizer
-from equities.data_processing.itch_preproc import transform_L2_state
+# from equities.data_processing.itch_preproc import transform_L2_state
 from equities.data_processing.base import SequenceDataset
 # default_data_path = Path(__file__).parent.parent.absolute()
 # default_data_path = default_data_path / "data"
@@ -323,9 +323,9 @@ class ITCH_Dataset(Dataset):
             if self.return_raw_msgs:
                 book_l2_init = book[0, 1:].copy()
 
-            # tranform from L2 (price volume) representation to fixed volume image 
-            if self.book_transform:
-                book = transform_L2_state(book, self.book_depth, 100)
+            # # tranform from L2 (price volume) representation to fixed volume image 
+            # if self.book_transform:
+            #     book = transform_L2_state(book, self.book_depth, 100)
 
             # use raw price, volume series, rather than volume image
             # subtract initial price to start all sequences around 0
