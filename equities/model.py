@@ -110,7 +110,7 @@ class Block(nn.Module):
 @dataclass
 class GPTConfig:
     block_size: int = 10624
-    vocab_size: int = 12515 # TODO: pad up to nearest multiple of 64 for efficiency
+    vocab_size: int = 12515 # TODO: pad up to nearest multiple of 64 for efficiency (e.g. 12544)
     n_layer: int = 12
     n_head: int = 12
     n_embd: int = 768
