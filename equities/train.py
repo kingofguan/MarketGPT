@@ -21,6 +21,8 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123
 import os
 import time
 import math
+import random
+from glob import glob
 # import pickle
 from contextlib import nullcontext
 
@@ -47,7 +49,8 @@ wandb_log = False # disabled by default
 wandb_project = 'owt'
 wandb_run_name = 'gpt2' # 'run' + str(time.time())
 # data
-dataset = '03272019.NASDAQ_ITCH50_AAPL_book_20_proc.npy'
+seed = 42
+rng = random.Random(seed)
 msg_seq_len = 425
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
@@ -116,14 +119,34 @@ ptdtype = {'float32': torch.float32, 'bfloat16': torch.bfloat16, 'float16': torc
 ctx = nullcontext() if device_type == 'cpu' else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
 
 # poor man's data loader
-data_dir = os.path.join('dataset/proc/ITCH/', dataset)
+# data_dir = os.path.join('dataset/proc/ITCH/', dataset)
+train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/train/')
+train_message_files = sorted(glob(str(train_data_dir) + '/*message*.npy'))
+assert len(train_message_files) > 0, f'no message files found in {train_data_dir}'
+val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/val/')
+val_message_files = sorted(glob(str(val_data_dir) + '/*message*.npy'))
+assert len(val_message_files) > 0, f'no message files found in {val_data_dir}'
+test_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/test/')
+test_message_files = sorted(glob(str(test_data_dir) + '/*message*.npy'))
+assert len(test_message_files) > 0, f'no message files found in {test_data_dir}'
 # train_data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
 # val_data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
-train_data = np.load(data_dir, mmap_mode='r')
-val_data = None
+# train_data = np.load(data_dir, mmap_mode='r')
+# val_data = None
+train_datasets = []
+for file in train_message_files:
+    train_datasets.append(np.load(file, mmap_mode='r'))
+val_datasets = []
+for file in val_message_files:
+    val_datasets.append(np.load(file, mmap_mode='r'))
+test_datasets = []
+for file in test_message_files:
+    test_datasets.append(np.load(file, mmap_mode='r'))
 vocab = Vocab()
 def get_batch(split):
-    data = train_data if split == 'train' else val_data
+    # data = train_data if split == 'train' else val_data
+    datasets = train_datasets if split == 'train' else val_datasets
+    data = rng.choice(datasets)
     ix = torch.randint(len(data) - msg_seq_len, (batch_size,))
     x = torch.stack([torch.from_numpy((encode_msgs((data[i:i+msg_seq_len]).astype(np.int64), vocab.ENCODING)).reshape(-1)) for i in ix])
     # target y is the same as x but shifted by one token
