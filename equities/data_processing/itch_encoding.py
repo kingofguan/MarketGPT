@@ -416,6 +416,8 @@ class Message_Tokenizer:
         # SIZE
         m.loc[m['size'] > 9999, 'size'] = 9999
         m.loc[m['oldSize'] > 9999, 'oldSize'] = 9999
+        m.loc[m['execSize'] > 9999, 'execSize'] = 9999
+        m.loc[m['cancSize'] > 9999, 'cancSize'] = 9999
         m['size'] = m['size'].astype(int)
 
         # PRICE

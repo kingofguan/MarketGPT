@@ -6,3 +6,6 @@ dataset/proc/*
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Model Checkpoints
+*.pt
