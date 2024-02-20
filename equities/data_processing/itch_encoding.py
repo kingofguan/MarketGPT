@@ -418,15 +418,33 @@ class Message_Tokenizer:
         m.loc[m['oldSize'] > 9999, 'oldSize'] = 9999
         m.loc[m['execSize'] > 9999, 'execSize'] = 9999
         m.loc[m['cancSize'] > 9999, 'cancSize'] = 9999
-        m['size'] = m['size'].astype(int)
+        m['size'] = m['size'].astype(int) # cannot do this to all other size fields bc they may be NaN (handled later)
+        # consolidate size columns
+        m['remain_size'] = m['size']
+        n_cols = len(m.columns)
+        for i in range(0, len(m)):
+            # set remaining size of add order to NaN
+            if m['type'].iloc[i] == 'A':
+                m.iloc[i, (n_cols-1)] = m['execSize'].iloc[i] # NaN
+            # set fill size of execute and cancel orders to execSize and cancSize respectively
+            elif m['type'].iloc[i] == 'E':
+                m.iloc[i, 7] = m['execSize'].iloc[i]
+            elif m['type'].iloc[i] == 'C':
+                m.iloc[i, 7] = m['execSize'].iloc[i]
+            elif m['type'].iloc[i] == 'D':
+                m.iloc[i, 7] = m['cancSize'].iloc[i]
+            # set remaining size of replace order to NaN
+            elif m['type'].iloc[i] == 'R':
+                m.iloc[i, (n_cols-1)] = m['execSize'].iloc[i] # NaN
+        m = m.rename(columns={'size': 'fill_size'})
 
         # PRICE
         m['price_abs'] = m.price  # keep absolute price for later (simulator)
+        m['old_price_abs'] = m.oldPrice  # keep absolute old price for later (simulator)
         # mid-price reference, rounded down to nearest tick_size
         tick_size = 1
         p_ref = (((b.iloc[:, 1] * 100) + (b.iloc[:, 3] * 100)) / 2).shift()#.round(-2).astype(int).shift()
         p_ref = (p_ref // tick_size) * tick_size
-        # --> 1999 price levels // ...00 since tick size is 100
         m.price = self._preproc_prices(m.price, p_ref, p_lower_trunc=-999, p_upper_trunc=999)
         m = m.iloc[1:]
         m.price = m.price.astype(int)
@@ -434,19 +452,20 @@ class Message_Tokenizer:
         # # DIRECTION
         # m.direction = ((m.direction + 1) / 2).astype(int)
 
-        # change column order
-        # m = m[['order_id', 'event_type', 'direction', 'price_abs', 'price', 'size',
-        #        'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns']]
-        m = m[['id', 'type', 'side', 'price_abs', 'price', 'size',
-               'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
-               'cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice']]
-
         # add time elements of original message as feature and process NaNs
         # for all referential order types ('E','C','D','R')
         m = self._add_orig_msg_features(
             m,
-            # modif_fields=['price', 'size', 'time_s', 'time_ns'])
-            modif_fields=['time_s', 'time_ns'])
+            modif_fields=['price', 'fill_size', 'time_s', 'time_ns'])
+        
+        # change column order
+        # m = m[['id', 'type', 'side', 'price_abs', 'price', 'size',
+        #        'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
+        #        'cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice']]
+        m = m.rename(columns={'oldId': 'old_id'})
+        m = m[['id', 'type', 'side', 'price_abs', 'price',
+                'fill_size', 'remain_size', 'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
+                'old_id', 'price_ref', 'fill_size_ref', 'time_s_ref', 'time_ns_ref', 'old_price_abs']]
         
         # convert event type to numeric for encoding step
         m.type = m.type.replace({'A': 1, 'E': 2, 'C': 3, 'D': 4, 'R': 5})
@@ -481,28 +500,29 @@ class Message_Tokenizer:
             m,
             modif_types={'E','C','D'},
             modif_types_special={'R'},
-            modif_fields=['time_s', 'time_ns'],
-            ref_cols = ['cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice'],
+            modif_fields=['price', 'fill_size', 'time_s', 'time_ns'],
+            special_cols = ['oldId', 'remain_size', 'old_price_abs'],
             nan_val=-9999
         ):
-        """ Changes representation of order cancellation (2) / deletion (3) / execution (4),
+        """ Changes representation of order cancellation ('D') / replace ('R')
+            / execution ('E') / execution at different price ('C'),
             representing them as the original message and new columns containing
             the order modification details.
             This effectively does the lookup step in past data.
             TODO: lookup missing original message data from previous days' data?
         """
 
-        # make df that converts 'R' values to 'A' values
+        # make df that converts 'R' values to 'A' values so that we can reference add order component of replace orders
         r_m = m.copy()
         r_m['type'] = r_m['type'].replace('R', 'A')
 
-        # merge changes to modif_types
+        # find and merge modif_fields of E, C, D events that match with A (and R) event id
         m_changes = pd.merge(
             m.loc[m.type.isin(modif_types)].reset_index(),
             r_m.loc[r_m.type == 'A', ['id'] + modif_fields],
             how='left', on='id', suffixes=['', '_ref']).set_index('index')
         
-        # merge changes to modif_types_special
+        # find modif_fields of R events that match with past A and R event oldIds
         m_changes_special = pd.merge(
             m.loc[m.type.isin(modif_types_special)].reset_index(),
             (r_m.loc[r_m.type == 'A', ['id'] + modif_fields]).rename(columns={'id': 'oldId'}),
@@ -512,13 +532,13 @@ class Message_Tokenizer:
         modif_cols = [field + '_ref' for field in modif_fields]
         m[modif_cols] = nan_val
 
-        # replace order changes by original order and additional new fields
+        # fill reference order types with new values
         m.loc[m_changes.index] = m_changes
         m.loc[m_changes_special.index] = m_changes_special
         m[modif_cols] = m[modif_cols].fillna(nan_val).astype(int)
 
-        # process other ref fields
-        m[ref_cols] = m[ref_cols].fillna(nan_val).astype(int)
+        # prepare remaining columns for encoding stage (fill NaNs)
+        m[special_cols] = m[special_cols].fillna(nan_val).astype(int)
 
         return m
     
