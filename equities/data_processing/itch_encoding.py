@@ -451,7 +451,7 @@ class Message_Tokenizer:
         p_ref = (p_ref // tick_size) * tick_size
         m.price = self._preproc_prices(m.price, p_ref, p_lower_trunc=-999, p_upper_trunc=999)
         m = m.iloc[1:]
-        m.price = m.price.astype(int)
+        m.price = m.price.fillna(999).astype(int) # handle very first (and final?) message with NaN price
 
         # # DIRECTION
         # m.direction = ((m.direction + 1) / 2).astype(int)

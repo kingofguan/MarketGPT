@@ -8,8 +8,7 @@ from tqdm import tqdm
 from glob import glob
 from decimal import Decimal
 
-from equities.data_processing.itch_encoding import Vocab, Message_Tokenizer
-# from itch_encoding import Vocab, Message_Tokenizer # TERMINAL
+from itch_encoding import Vocab, Message_Tokenizer
 
 import os
 import sys
@@ -85,8 +84,8 @@ def process_message_files(
         save_dir: str,
         filter_above_lvl: Optional[int] = None,
         skip_existing: bool = False,
-        remove_premarket: bool = True,
-        remove_aftermarket: bool = True,
+        remove_premarket: bool = False,
+        remove_aftermarket: bool = False,
     ) -> None:
 
     v = Vocab()
@@ -205,8 +204,8 @@ def process_book_files(
         allowed_events=['A','E','C','D','R'],
         skip_existing: bool = False,
         use_raw_book_repr=False,
-        remove_premarket: bool = True,
-        remove_aftermarket: bool = True,
+        remove_premarket: bool = False,
+        remove_aftermarket: bool = False,
     ) -> None:
 
     # create ticker symbol mapping
@@ -277,11 +276,22 @@ def process_book(
     ) -> np.ndarray:
 
     # mid-price rounded to nearest tick
-    p_ref = ((b.iloc[:, 0] + b.iloc[:, 2]) / 2).mul(100).round().astype(int)
-    b_indices = b.iloc[:, ::2].mul(100).sub(p_ref, axis=0).astype(int)
-    b_indices = b_indices + price_levels // 2 # make tick differences fit between span of 0 to price_levels
+    p_ref = ((b.iloc[:, 0] + b.iloc[:, 2]) / 2)
+    # determine if NaN is present
+    if p_ref.isnull().values.any():
+        print('NaN detected. Replacing with best existing bid or ask price.')
+        # replace mid-price with best existing bid or ask price
+        p_ref = p_ref.fillna(b.iloc[:, 0].combine_first(b.iloc[:, 2]))
+        # replace any remaining NaNs with previous value
+        if p_ref.isnull().values.any():
+            print('More NaN detected. Replacing with previous value.')
+            p_ref = p_ref.ffill()
+    p_ref = p_ref.mul(100).round().astype(int) # format; round to nearest tick
+    # how far are bid and ask from mid price?
+    b_indices = b.iloc[:, ::2].mul(100).fillna(0).sub(p_ref, axis=0).astype(int)
+    b_indices = b_indices + price_levels // 2 # valid tick differences will fit between span of 0 to price_levels
     b_indices.columns = list(range(b_indices.shape[1])) # reset col indices
-    vol_book = b.iloc[:, 1::2].copy().astype(int)
+    vol_book = b.iloc[:, 1::2].copy().fillna(0).astype(int)
     # convert sell volumes (ask side) to negative
     vol_book.iloc[:, 1::2] = vol_book.iloc[:, 1::2].mul(-1)
     vol_book.columns = list(range(vol_book.shape[1])) # reset col indices
@@ -324,6 +334,8 @@ if __name__ == '__main__':
     parser.add_argument("--messages_only", action='store_true', default=False)
     parser.add_argument("--book_only", action='store_true', default=False)
     parser.add_argument("--use_raw_book_repr", action='store_true', default=False)
+    parser.add_argument("--remove_premarket", action='store_true', default=False)
+    parser.add_argument("--remove_aftermarket", action='store_true', default=False)
     args = parser.parse_args()
 
     assert not (args.messages_only and args.book_only)
@@ -345,6 +357,8 @@ if __name__ == '__main__':
             args.save_dir,
             filter_above_lvl=args.filter_above_lvl,
             skip_existing=args.skip_existing,
+            remove_premarket=args.remove_premarket,
+            remove_aftermarket=args.remove_aftermarket,
         )
     else:
         print('Skipping message processing...')
@@ -361,6 +375,8 @@ if __name__ == '__main__':
             n_price_series=args.n_tick_range,
             skip_existing=args.skip_existing,
             use_raw_book_repr=args.use_raw_book_repr,
+            remove_premarket=args.remove_premarket,
+            remove_aftermarket=args.remove_aftermarket,
         )
     else:
         print('Skipping book processing...')
