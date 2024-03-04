@@ -7,5 +7,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Model Checkpoints
+# Model Logs & Checkpoints
 *.pt
+wandb/*
