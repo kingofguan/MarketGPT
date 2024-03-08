@@ -3,19 +3,19 @@ Sample from a trained model
 """
 import os
 # import pickle
+from tqdm import tqdm
 import numpy as np
 from contextlib import nullcontext
 import torch
-# import tiktoken
 from model import GPTConfig, GPT
 from data_processing.itch_encoding import Vocab, encode_msgs, decode_msg
 
 # -----------------------------------------------------------------------------
 init_from = 'resume' # either 'resume' (from an out_dir) or a gpt2 variant (e.g. 'gpt2-xl')
 out_dir = 'out' # ignored if init_from is not 'resume'
-dataset = '12302019.NASDAQ_ITCH50_AAPL_message_proc.npy' # dataset to use for initial prompt
-# start = "\n" # or "<|endoftext|>" or etc. Can also specify a file, use as: "FILE:prompt.txt"
-num_context_msgs = 3 # number of messages from dataset to use as context
+# dataset = '12302019.NASDAQ_ITCH50_AAPL_message_proc.npy' # dataset to use for initial prompt
+dataset = '03272019.NASDAQ_ITCH50_AAPL_message_proc.npy' # dataset to use for initial prompt
+num_context_msgs = 100 # number of messages from dataset to use as context
 # num_samples = 10 # number of samples to draw
 num_samples = 1 # number of samples to draw
 # max_new_tokens = 500 # number of tokens generated in each sample
@@ -50,76 +50,62 @@ if init_from == 'resume':
         if k.startswith(unwanted_prefix):
             state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
     model.load_state_dict(state_dict)
-# elif init_from.startswith('gpt2'):
-#     # init from a given GPT-2 model
-#     model = GPT.from_pretrained(init_from, dict(dropout=0.0))
 
 model.eval()
 model.to(device)
 if compile:
     model = torch.compile(model) # requires PyTorch 2.0 (optional)
-
-# # look for the meta pickle in case it is available in the dataset folder
-# load_meta = False
-# if init_from == 'resume' and 'config' in checkpoint and 'dataset' in checkpoint['config']: # older checkpoints might not have these...
-#     meta_path = os.path.join('data', checkpoint['config']['dataset'], 'meta.pkl')
-#     load_meta = os.path.exists(meta_path)
-# if load_meta:
-#     print(f"Loading meta from {meta_path}...")
-#     with open(meta_path, 'rb') as f:
-#         meta = pickle.load(f)
-#     # TODO want to make this more general to arbitrary encoder/decoder schemes
-#     stoi, itos = meta['stoi'], meta['itos']
-#     encode = lambda s: [stoi[c] for c in s]
-#     decode = lambda l: ''.join([itos[i] for i in l])
-# else:
-#     # ok let's assume gpt-2 encodings by default
-#     print("No meta.pkl found, assuming GPT-2 encodings...")
-#     enc = tiktoken.get_encoding("gpt2")
-#     encode = lambda s: enc.encode(s, allowed_special={"<|endoftext|>"})
-#     decode = lambda l: enc.decode(l)
     
 # define dataset to use for initial prompt
-data_dir = os.path.join('dataset/proc/ITCH/test/', dataset)
+# data_dir = os.path.join('dataset/proc/ITCH/test/', dataset)
+data_dir = os.path.join('dataset/proc/ITCH/full_view/', dataset)
 
 # grab and encode sample data to use as context
 vocab = Vocab()
-context_dataset = np.load(data_dir, mmap_mode='r')
-X_raw = np.array(context_dataset[0:num_context_msgs])
+# context_dataset = np.load(data_dir, mmap_mode='r')
+# X_raw = np.array(context_dataset[0:num_context_msgs])
+proc_messages = np.array(np.load(data_dir, mmap_mode='r')[0:(15700 + num_context_msgs)])
+X_raw = proc_messages[-num_context_msgs:]
+print("X_raw.shape:", X_raw.shape)
 X = encode_msgs(X_raw, vocab.ENCODING)
+print("X.shape:", X.shape)
+time = decode_msg(X[-1], vocab.ENCODING)[10] * 1000000000 + decode_msg(X[-1], vocab.ENCODING)[11]
+print("current simulation time:", time)
+gen_start_time = time # for computing simulation time elapsed in generation
 encoded_tok_len = X.shape[1]
-print("X (encoded seq):", X)
 
 # prepare context tensor
 x = (torch.tensor(X.reshape(-1), dtype=torch.long, device=device)[None, ...])
+print("x.shape:", x.shape)
 
-# # encode the beginning of the prompt
-# if start.startswith('FILE:'):
-#     with open(start[5:], 'r', encoding='utf-8') as f:
-#         start = f.read()
-# start_ids = encode(start)
-# x = (torch.tensor(start_ids, dtype=torch.long, device=device)[None, ...])
+num_generation_steps = 500
 
-# run generation
-with torch.no_grad():
-    with ctx:
-        for k in range(num_samples):
-            # y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-            y = model.generate(x, max_new_tokens*encoded_tok_len, temperature=temperature, top_k=top_k)
-            # print(decode(y[0].tolist()))
-            print('---------------')
-        print("new sequence", y[0].tolist())
+for t in tqdm(range(num_generation_steps)):
+    # run generation
+    with torch.no_grad():
+        with ctx:
+            for k in range(num_samples):
+                # y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
+                y = model.generate(x, max_new_tokens*encoded_tok_len, temperature=temperature, top_k=top_k)
+                # print('---------------')
+    # set new message as context for next iteration
+    x_new = y[0][-24:]
+    x_new = torch.unsqueeze(x_new, 0) # add batch dimension for concatenation purposes
+    # append sampled index to the running sequence and continue
+    x = torch.cat((x, x_new), dim=1)
 
-# print the last message in the generated sequence
-print("last generated msg:", y[0][-24:].tolist())
-print("decoded msg:", decode_msg(np.array(y[0][-24:].tolist()), vocab.ENCODING))
+    # if the sequence context is growing too long we must crop it at block_size
+    if (x.size(1) + encoded_tok_len) > model.config.block_size:
+        x = x[:, encoded_tok_len:]
 
-# compare with real sequence
-X_true = np.array(context_dataset[0:num_context_msgs+max_new_tokens])
-print("true sequence:", X_true[-1])
+# # print the last message in the generated sequence
+# print("last generated msg:", y[0][-24:].tolist())
+# print("decoded msg:", decode_msg(np.array(y[0][-24:].tolist()), vocab.ENCODING))
 
-# print decoding guide for reference
-print([ "ticker", "NA_VAL",
-        "event_type", "direction", "NA_VAL", "price", "fill_size", "remain_size",
-        "delta_t_s", "delta_t_ns", "time_s", "time_ns",
-        "NA_VAL", "price_ref", "fill_size_ref", "time_s_ref", "time_ns_ref", "NA_VAL"])
+# # # compare with real sequence
+# # X_true = np.array(context_dataset[0:num_context_msgs+max_new_tokens])
+# # print("true sequence:", X_true[-1])
+
+# [ "ticker", "order_id", "event_type", "direction", "price_abs", "price",
+#  "fill_size", "remain_size", "delta_t_s", "delta_t_ns", "time_s", "time_ns",
+#  "old_id", "price_ref", "fill_size_ref", "time_s_ref", "time_ns_ref", "old_price_abs"]
