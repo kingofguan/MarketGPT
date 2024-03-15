@@ -505,6 +505,7 @@ class Message_Tokenizer:
             modif_types={'E','C','D'},
             modif_types_special={'R'},
             modif_fields=['price', 'fill_size', 'time_s', 'time_ns'],
+            modif_fields_special=['price_abs', 'fill_size', 'time_s', 'time_ns'],
             special_cols = ['oldId', 'remain_size', 'old_price_abs'],
             nan_val=-9999
         ):
@@ -529,8 +530,11 @@ class Message_Tokenizer:
         # find modif_fields of R events that match with past A and R event oldIds
         m_changes_special = pd.merge(
             m.loc[m.type.isin(modif_types_special)].reset_index(),
-            (r_m.loc[r_m.type == 'A', ['id'] + modif_fields]).rename(columns={'id': 'oldId'}),
+            (r_m.loc[r_m.type == 'A', ['id'] + modif_fields_special]).rename(columns={'id': 'oldId'}),
             how='left', on='oldId', suffixes=['', '_ref']).set_index('index')
+        # price_ref = old_mid_price - new_mid_price (different from price_ref above)
+        m_changes_special.rename(columns={'price_abs_ref': 'price_ref'}, inplace=True)
+        m_changes_special['price_ref'] = m_changes_special['price_ref'] - m_changes_special['price_abs']
 
         # add new empty columns for referenced order
         modif_cols = [field + '_ref' for field in modif_fields]
