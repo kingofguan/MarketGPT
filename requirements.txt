@@ -1,0 +1,8 @@
+matplotlib
+numpy
+pandas
+pyarrow
+pytest
+tqdm
+wandb
+# install pytorch nightly from pytorch.org
