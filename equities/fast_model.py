@@ -24,7 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-KVCACHE = False # True
+KVCACHE = True
 
 @dataclass
 class ModelArgs:
@@ -37,7 +37,7 @@ class ModelArgs:
     hidden_dim: Optional[int] = None
     multiple_of: int = 256  # MLP hidden layer size will be multiple of
     norm_eps: float = 1e-5
-    max_seq_len: int = 10367 # block size
+    max_seq_len: int = 10368 # block size
     dropout: float = 0.0
 
 
@@ -162,7 +162,7 @@ class KVCache:
         self.value: torch.Tensor = torch.zeros(shape, device=device, dtype=dtype)
         self.max_seq_length = max_seq_length # hard code "true" cache limit for now?
         self.encoded_tok_len = 24
-        self.sink_tokens = 0 # 24
+        self.sink_tokens = 1 # 0 # 24
 
     def update(
         self, keys: torch.Tensor, values: torch.Tensor, start_pos: torch.Tensor, roll: bool
@@ -177,13 +177,15 @@ class KVCache:
             sink_side_key = self.key[:, 0:self.sink_tokens, :, :]
             # recent_side_key = self.key[:, (self.sink_tokens + self.encoded_tok_len - T):, :, :]
             recent_side_key = (self.key[:, self.sink_tokens:, :, :]).roll(-self.encoded_tok_len, dims=1)
-            self.key = torch.cat((recent_side_key, sink_side_key), dim=1)
+            # self.key = torch.cat((recent_side_key, sink_side_key), dim=1)
+            self.key = torch.cat((sink_side_key, recent_side_key), dim=1)
             # print("sink_side_key:", sink_side_key.shape)
             # print("recent_side_key:", recent_side_key.shape)
             sink_side_value = self.value[:, 0:self.sink_tokens, :, :]
             # recent_side_value = self.value[:, (self.sink_tokens + self.encoded_tok_len - T):, :, :]
             recent_side_value = (self.value[:, self.sink_tokens:, :, :]).roll(-self.encoded_tok_len, dims=1)
-            self.value = torch.cat((recent_side_value, sink_side_value), dim=1)
+            # self.value = torch.cat((recent_side_value, sink_side_value), dim=1)
+            self.value = torch.cat((sink_side_value, recent_side_value), dim=1)
         # if start_pos >= 10319:
         #     print("start_pos:", start_pos)
         #     print("self.key:", self.key.shape)
@@ -253,11 +255,11 @@ class Attention(nn.Module):
             xq = apply_rotary_emb_single(xq, freqs_cos, freqs_sin)
             freqs_cos_cache, freqs_sin_cache = freqs_cache
             # if input_pos >= 10319:
-                # print("freqs_cos_cache:", freqs_cos_cache.shape)
-                # print("freqs_sin_cache:", freqs_sin_cache.shape)
-                # print("xk:", xk.shape)
-                # print("xq:", xq.shape)
-                # print("-------------------")
+            #     print("freqs_cos_cache:", freqs_cos_cache.shape)
+            #     print("freqs_sin_cache:", freqs_sin_cache.shape)
+            #     print("xk:", xk.shape)
+            #     print("xq:", xq.shape)
+            #     print("-------------------")
             xk = apply_rotary_emb_single(xk, freqs_cos_cache, freqs_sin_cache)
 
         # grouped multiquery attention: expand out keys and values
@@ -501,7 +503,8 @@ class Transformer(nn.Module):
             # print("input_pos:", input_pos)
             # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=max_new_tokens, input_pos=input_pos)
             # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=self.params.max_seq_len, input_pos=input_pos, roll=roll)
-            logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=10343, input_pos=input_pos, roll=roll)
+            # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=10343, input_pos=input_pos, roll=roll)
+            logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=10344, input_pos=input_pos, roll=roll)
             logits = logits[:, -1, :] # crop to just the final time step
             if temperature == 0.0:
                 # "sample" the single most likely index

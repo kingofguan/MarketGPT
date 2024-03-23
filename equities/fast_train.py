@@ -53,9 +53,12 @@ wandb_run_name = "run" + datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 # data
 seed = 42
 rng = random.Random(seed)
+use_sink = True # if True, use a dedicated sink token at the start of every training sample (per https://arxiv.org/pdf/2309.17453.pdf)
 msg_seq_len = 432
 batch_size = 1 # if gradient_accumulation_steps > 1, this is the micro-batch size
 max_seq_len = 10367 # block_size
+if use_sink:
+    max_seq_len += 1
 vocab = Vocab()
 vocab_size = 12515
 # model
@@ -147,6 +150,10 @@ for file in train_message_files:
 val_datasets = []
 for file in val_message_files:
     val_datasets.append(np.load(file, mmap_mode='r'))
+# verify sink token compatibility with dataloader implementation
+if use_sink:
+    assert vocab.SINK_TOK == 1
+    assert max_seq_len == 10368
 # poor man's data loader
 def get_batch(split):
     # data = train_data if split == 'train' else val_data
@@ -154,10 +161,13 @@ def get_batch(split):
     data = rng.choice(datasets)
     ix = torch.randint(len(data) - msg_seq_len, (batch_size,))
     x = torch.stack([torch.from_numpy((encode_msgs((data[i:i+msg_seq_len]).astype(np.int64), vocab.ENCODING)).reshape(-1)) for i in ix])
+    if use_sink:
+        # append sink token to start of each batch sequence (since vocab.SINK_TOK = 1, we can just use torch.ones)
+        x = torch.cat([torch.ones((batch_size, 1), dtype=torch.int), x], dim=1)
     # target y is the same as x but shifted by one token
     y = x[:, 1:]
     y = y.type(torch.LongTensor) # casting to long for cross entropy loss fn
-    x = x[:, :-1]
+    x = x[:, :-1] # offset x by one (final) token to match y
     if device_type == 'cuda':
         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
@@ -188,7 +198,7 @@ if init_from == "scratch":
 elif init_from == "resume":
     print(f"Resuming training from {out_dir}")
     # resume training from a checkpoint.
-    ckpt_path = os.path.join(out_dir, "ckpt_fast.pt")
+    ckpt_path = os.path.join(out_dir, "ckpt_fast_v2.pt")
     checkpoint = torch.load(ckpt_path, map_location=device)
     checkpoint_model_args = checkpoint["model_args"]
     # force these config attributes to be equal otherwise we can't even resume training
@@ -311,7 +321,7 @@ while True:
                     "config": config,
                 }
                 print(f"saving checkpoint to {out_dir}")
-                torch.save(checkpoint, os.path.join(out_dir, "ckpt_fast.pt"))
+                torch.save(checkpoint, os.path.join(out_dir, "ckpt_fast_v2.pt"))
     if iter_num == 0 and eval_only:
         break
 

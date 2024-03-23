@@ -6,7 +6,7 @@ import pandas as pd
 
 
 NA_VAL = -9999
-HIDDEN_VAL = -20000
+SINK_VAL = -20000
 MASK_VAL = -10000
 
 
@@ -20,7 +20,7 @@ def decode(ar, ks, vs):
     return encode(ar, vs, ks)
 
 def is_special_val(x):
-    return np.isin(x, np.array([MASK_VAL, HIDDEN_VAL, NA_VAL])).any()
+    return np.isin(x, np.array([MASK_VAL, SINK_VAL, NA_VAL])).any()
 
 def expand_special_val(x, n_tokens):
     return np.tile(x, (n_tokens,))
@@ -227,11 +227,11 @@ def repr_raw_msg(msg):
 class Vocab:
 
     MASK_TOK = 0
-    HIDDEN_TOK = 1
+    SINK_TOK = 1
     NA_TOK = 2
 
     def __init__(self) -> None:
-        self.counter = 3  # 0: MSK, 1: HID, 2: NAN
+        self.counter = 3  # 0: MSK, 1: SINK, 2: NAN
         self.ENCODING = {}
         self.DECODING = {}
         self.DECODING_GLOBAL = {}
@@ -249,7 +249,7 @@ class Vocab:
         return self.counter
 
     def _add_field(self, name, values, delim_i=None):
-        enc = [(MASK_VAL, Vocab.MASK_TOK), (HIDDEN_VAL, Vocab.HIDDEN_TOK), (NA_VAL, Vocab.NA_TOK)]
+        enc = [(MASK_VAL, Vocab.MASK_TOK), (SINK_VAL, Vocab.SINK_TOK), (NA_VAL, Vocab.NA_TOK)]
         enc += [(val, self.counter + i) for i, val in enumerate(values)]
         self.counter += len(enc) - 3  # don't count special tokens
         enc = tuple(zip(*enc))
@@ -260,19 +260,19 @@ class Vocab:
     def _add_special_tokens(self):
         for field, enc in self.ENCODING.items():
             self.ENCODING[field]['MSK'] = Vocab.MASK_TOK
-            self.ENCODING[field]['HID'] = Vocab.HIDDEN_TOK
+            self.ENCODING[field]['SINK'] = Vocab.SINK_TOK
             self.ENCODING[field]['NAN'] = Vocab.NA_TOK
 
             self.DECODING[field][Vocab.MASK_TOK] = 'MSK'
-            self.DECODING[field][Vocab.HIDDEN_TOK] = 'HID'
+            self.DECODING[field][Vocab.SINK_TOK] = 'SINK'
             self.DECODING[field][Vocab.NA_TOK] = 'NAN'
         self.ENCODING['generic'] = {
             'MSK': Vocab.MASK_TOK,
-            'HID': Vocab.HIDDEN_TOK,
+            'SINK': Vocab.SINK_TOK,
             'NAN': Vocab.NA_TOK,
         }
         self.DECODING_GLOBAL[Vocab.MASK_TOK] = ('generic', 'MSK')
-        self.DECODING_GLOBAL[Vocab.HIDDEN_TOK] = ('generic', 'HID')
+        self.DECODING_GLOBAL[Vocab.SINK_TOK] = ('generic', 'SINK')
         self.DECODING_GLOBAL[Vocab.NA_TOK] = ('generic', 'NAN')
 
 # TODO: REIMPLEMENT
