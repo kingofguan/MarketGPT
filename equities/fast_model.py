@@ -481,7 +481,7 @@ class Transformer(nn.Module):
         return mfu
 
     @torch.inference_mode()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, start=False, roll=False):
+    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, start=False, roll=False, new_block_size=10344):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -503,8 +503,7 @@ class Transformer(nn.Module):
             # print("input_pos:", input_pos)
             # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=max_new_tokens, input_pos=input_pos)
             # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=self.params.max_seq_len, input_pos=input_pos, roll=roll)
-            # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=10343, input_pos=input_pos, roll=roll)
-            logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=10344, input_pos=input_pos, roll=roll)
+            logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=new_block_size, input_pos=input_pos, roll=roll)
             logits = logits[:, -1, :] # crop to just the final time step
             if temperature == 0.0:
                 # "sample" the single most likely index
