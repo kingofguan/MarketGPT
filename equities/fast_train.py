@@ -37,7 +37,7 @@ from data_processing.itch_encoding import Vocab, encode_msgs
 from fast_model import Transformer, ModelArgs
 
 # -----------------------------------------------------------------------------
-# default config values
+# config values from best sweep run
 # I/O
 out_dir = "out"
 eval_interval = 50 # 2000
@@ -70,11 +70,11 @@ multiple_of = 32
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # adamw optimizer
 gradient_accumulation_steps = 5 * 8 # 4 # used to simulate larger batch sizes
-learning_rate = 6e-4 # 5e-4 # max learning rate
-max_iters = 1000 # 100000 # total number of training iterations
-weight_decay = 1e-1
+learning_rate = 1e-3 # max learning rate
+max_iters = 4000 # 100000 # total number of training iterations
+weight_decay = 0.00001
 beta1 = 0.9
-beta2 = 0.95
+beta2 = 0.98
 grad_clip = 1.0  # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr = True  # whether to decay the learning rate
@@ -198,7 +198,7 @@ if init_from == "scratch":
 elif init_from == "resume":
     print(f"Resuming training from {out_dir}")
     # resume training from a checkpoint.
-    ckpt_path = os.path.join(out_dir, "ckpt_fast_v2.pt")
+    ckpt_path = os.path.join(out_dir, "ckpt_fast_v5.pt")
     checkpoint = torch.load(ckpt_path, map_location=device)
     checkpoint_model_args = checkpoint["model_args"]
     # force these config attributes to be equal otherwise we can't even resume training
@@ -321,7 +321,7 @@ while True:
                     "config": config,
                 }
                 print(f"saving checkpoint to {out_dir}")
-                torch.save(checkpoint, os.path.join(out_dir, "ckpt_fast_v2.pt"))
+                torch.save(checkpoint, os.path.join(out_dir, "ckpt_fast_v5.pt"))
     if iter_num == 0 and eval_only:
         break
 

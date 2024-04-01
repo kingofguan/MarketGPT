@@ -28,7 +28,7 @@ KVCACHE = True
 
 @dataclass
 class ModelArgs:
-    # default hyperparameters for the Llama 7B model
+    # inspired by default hyperparameters for the Llama 7B model
     dim: int = 768 # embedding dimension
     n_layers: int = 12
     n_heads: int = 12
@@ -418,7 +418,8 @@ class Transformer(nn.Module):
             assert max_seq_length is not None
             assert input_pos is not None
             if self.kv_cache[0] is None:
-                shape = (_bsz,max_seq_length,self.params.n_heads,self.params.dim//self.params.n_heads)
+                # shape = (_bsz,max_seq_length,self.params.n_heads,self.params.dim//self.params.n_heads)
+                shape = (_bsz,max_seq_length,self.params.n_kv_heads,self.params.dim//self.params.n_heads)
                 self.kv_cache = [KVCache(shape,max_seq_length,device=h.device,dtype=h.dtype) for _ in range(self.params.n_layers)]
         elif self.kv_cache[-1] is not None:
             self.kv_cache = [None for _ in range(self.params.n_layers)]

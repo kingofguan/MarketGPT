@@ -533,6 +533,7 @@ class Message_Tokenizer:
             (r_m.loc[r_m.type == 'A', ['id'] + modif_fields_special]).rename(columns={'id': 'oldId'}),
             how='left', on='oldId', suffixes=['', '_ref']).set_index('index')
         # price_ref = old_mid_price - new_mid_price (different from price_ref above)
+        # TODO: Repeat this process for 'C' events
         m_changes_special.rename(columns={'price_abs_ref': 'price_ref'}, inplace=True)
         m_changes_special['price_ref'] = m_changes_special['price_ref'] - m_changes_special['price_abs']
 
