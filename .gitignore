@@ -1,6 +1,7 @@
 # Data stuff
 dataset/raw/*
 dataset/proc/*
+gen_data/*
 
 # Figures
 fig/*

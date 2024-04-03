@@ -482,12 +482,21 @@ class Transformer(nn.Module):
         return mfu
 
     @torch.inference_mode()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, start=False, roll=False, new_block_size=10344):
+    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, top_p = 0.9, start=False, roll=False, new_block_size=10344):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
         Most likely you'll want to make sure to be in model.eval() mode of operation for this.
-        Also note this is a super inefficient version of sampling with no key/value cache.
+        Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+        Args:
+            idx: (b,t) LongTensor of input tokens
+            max_new_tokens: int, the number of tokens to generate
+            temperature >0: scale logits before applying softmax
+            top_k >0: keep only top k tokens with highest probability (top-k filtering).
+            top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
+                Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
+            start: bool, if True, the input is the start of a new sequence, otherwise it is a continuation
+            roll: bool, if True, the input is the start of a rolling sequence and the KV cache is rolled
         """
         B,T = idx.shape
         # input_pos = 0
@@ -506,7 +515,7 @@ class Transformer(nn.Module):
             # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=self.params.max_seq_len, input_pos=input_pos, roll=roll)
             logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=new_block_size, input_pos=input_pos, roll=roll)
             logits = logits[:, -1, :] # crop to just the final time step
-            if temperature == 0.0:
+            if temperature == 0.0: # greedy sampling:
                 # "sample" the single most likely index
                 _, idx_next = torch.topk(logits, k=1, dim=-1)
             else:
@@ -516,6 +525,17 @@ class Transformer(nn.Module):
                 if top_k is not None:
                     v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
                     logits[logits < v[:, [-1]]] = -float('Inf')
+                if top_p > 0.0:
+                    # First sort and calculate cumulative sum of probabilities.
+                    sorted_logits, sorted_indices = torch.sort(logits, descending=False)
+                    cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
+                    # Remove tokens with cumulative top_p above the threshold (token with 0 are kept)
+                    sorted_indices_to_remove = cumulative_probs <= (1 - top_p)
+                    # scatter sorted tensors to original indexing
+                    indices_to_remove = sorted_indices_to_remove.scatter(
+                        1, sorted_indices, sorted_indices_to_remove
+                    )
+                    logits.masked_fill_(indices_to_remove, float("-inf"))
                 # apply softmax to convert logits to (normalized) probabilities
                 probs = F.softmax(logits, dim=-1)
                 idx_next = torch.multinomial(probs, num_samples=1)
