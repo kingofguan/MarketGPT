@@ -240,7 +240,7 @@ class Vocab:
         self._add_field('time', range(1000), [3,6,9,12])
         self._add_field('type', range(1,6), None)
         self._add_field('size', range(10000), [])
-        self._add_field('price', range(1000), [1])
+        self._add_field('price', range(1000), [1]) # TODO: consider expanding this for high-priced stocks (e.g., pre-split AMZN)
         self._add_field('sign', [-1, 1], None)
         self._add_field('side', [0, 1], None)
         self._add_field('ticker', range(1,504), None) # limit to S&P500 for now
@@ -392,7 +392,7 @@ class Message_Tokenizer:
     def invalid_toks_per_seq(self, toks, vocab):
         return self.invalid_toks_per_msg(toks, vocab).sum(axis=-1)
 
-    def preproc(self, m, b, allowed_event_types=['A','E','C','D','R']):
+    def preproc(self, m, b, allowed_event_types=['A','E','C','D','R'], is_multi=False):
         # TYPE
         # filter out only allowed event types ...
         m = m.loc[m.type.isin(allowed_event_types)].copy()
@@ -458,16 +458,27 @@ class Message_Tokenizer:
 
         # add time elements of original message as feature and process NaNs
         # for all referential order types ('E','C','D','R')
-        m = self._add_orig_msg_features(
-            m,
-            modif_fields=['price', 'fill_size', 'time_s', 'time_ns'])
+        if not is_multi:
+            m = self._add_orig_msg_features(
+                m,
+                modif_fields=['price', 'fill_size', 'time_s', 'time_ns'])
+        else:
+            m = self._add_orig_msg_features_multi(
+                m,
+                b,
+                modif_fields=['price', 'fill_size', 'time_s', 'time_ns'])
         
         # change column order
         # m = m[['id', 'type', 'side', 'price_abs', 'price', 'size',
         #        'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
         #        'cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice']]
         m = m.rename(columns={'oldId': 'old_id'})
-        m = m[['id', 'type', 'side', 'price_abs', 'price',
+        if not is_multi:
+            m = m[['id', 'type', 'side', 'price_abs', 'price',
+                'fill_size', 'remain_size', 'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
+                'old_id', 'price_ref', 'fill_size_ref', 'time_s_ref', 'time_ns_ref', 'old_price_abs']]
+        else:
+            m = m[['ticker_id', 'id', 'type', 'side', 'price_abs', 'price',
                 'fill_size', 'remain_size', 'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
                 'old_id', 'price_ref', 'fill_size_ref', 'time_s_ref', 'time_ns_ref', 'old_price_abs']]
         
@@ -489,6 +500,7 @@ class Message_Tokenizer:
         # truncate price at deviation of x
         # min tick is 100, hence min 10-level diff is 900
         # <= 1000 covers ~99.54% on bid side, ~99.1% on ask size (GOOG)
+        # 1000 limit doesn't work as well for high-priced stocks (e.g., pre-split AMZN)
         pct_changed = 100 * len(p.loc[p > p_upper_trunc]) / len(p)
         print(f"truncating {pct_changed:.4f}% of prices > {p_upper_trunc}")
         p.loc[p > p_upper_trunc] = p_upper_trunc
@@ -502,8 +514,9 @@ class Message_Tokenizer:
     def _add_orig_msg_features(
             self,
             m,
-            modif_types={'E','C','D'},
+            modif_types={'E','D'},
             modif_types_special={'R'},
+            modif_type_C={'C'},
             modif_fields=['price', 'fill_size', 'time_s', 'time_ns'],
             modif_fields_special=['price_abs', 'fill_size', 'time_s', 'time_ns'],
             special_cols = ['oldId', 'remain_size', 'old_price_abs'],
@@ -533,9 +546,16 @@ class Message_Tokenizer:
             (r_m.loc[r_m.type == 'A', ['id'] + modif_fields_special]).rename(columns={'id': 'oldId'}),
             how='left', on='oldId', suffixes=['', '_ref']).set_index('index')
         # price_ref = old_mid_price - new_mid_price (different from price_ref above)
-        # TODO: Repeat this process for 'C' events
         m_changes_special.rename(columns={'price_abs_ref': 'price_ref'}, inplace=True)
         m_changes_special['price_ref'] = m_changes_special['price_ref'] - m_changes_special['price_abs']
+
+        # Repeat the above process for 'C' events
+        m_changes_C = pd.merge(
+            m.loc[m.type.isin(modif_type_C)].reset_index(),
+            r_m.loc[r_m.type == 'A', ['id'] + modif_fields_special],
+            how='left', on='id', suffixes=['', '_ref']).set_index('index')
+        m_changes_C.rename(columns={'price_abs_ref': 'price_ref'}, inplace=True)
+        m_changes_C['price_ref'] = m_changes_C['price_ref'] - m_changes_C['price_abs']
 
         # add new empty columns for referenced order
         modif_cols = [field + '_ref' for field in modif_fields]
@@ -544,6 +564,68 @@ class Message_Tokenizer:
         # fill reference order types with new values
         m.loc[m_changes.index] = m_changes
         m.loc[m_changes_special.index] = m_changes_special
+        m.loc[m_changes_C.index] = m_changes_C
+        m[modif_cols] = m[modif_cols].fillna(nan_val).astype(int)
+
+        # prepare remaining columns for encoding stage (fill NaNs)
+        m[special_cols] = m[special_cols].fillna(nan_val).astype(int)
+
+        return m
+    
+    def _add_orig_msg_features_multi(
+            self,
+            m,
+            modif_types={'E','D'},
+            modif_types_special={'R'},
+            modif_type_C={'C'},
+            modif_fields=['price', 'fill_size', 'time_s', 'time_ns'],
+            modif_fields_special=['price_abs', 'fill_size', 'time_s', 'time_ns'],
+            special_cols = ['oldId', 'remain_size', 'old_price_abs'],
+            nan_val=-9999
+        ):
+        """ Changes representation of order cancellation ('D') / replace ('R')
+            / execution ('E') / execution at different price ('C'),
+            representing them as the original message and new columns containing
+            the order modification details.
+            This effectively does the lookup step in past data.
+            TODO: lookup missing original message data from previous days' data?
+        """
+
+        # make df that converts 'R' values to 'A' values so that we can reference add order component of replace orders
+        r_m = m.copy()
+        r_m['type'] = r_m['type'].replace('R', 'A')
+
+        # find and merge modif_fields of E, D events that match with A (and R) event id
+        m_changes = pd.merge(
+            m.loc[m.type.isin(modif_types)].reset_index(),
+            r_m.loc[r_m.type == 'A', ['id'] + ['ticker_id'] + modif_fields],
+            how='left', on=['id', 'ticker_id'], suffixes=['', '_ref']).set_index('index')
+        
+        # find modif_fields of R events that match with past A and R event oldIds
+        m_changes_special = pd.merge(
+            m.loc[m.type.isin(modif_types_special)].reset_index(),
+            (r_m.loc[r_m.type == 'A', ['id'] + ['ticker_id'] + modif_fields_special]).rename(columns={'id': 'oldId'}),
+            how='left', on=['oldId', 'ticker_id'], suffixes=['', '_ref']).set_index('index')
+        # price_ref = old_mid_price - new_mid_price (different from price_ref above)
+        m_changes_special.rename(columns={'price_abs_ref': 'price_ref'}, inplace=True)
+        m_changes_special['price_ref'] = m_changes_special['price_ref'] - m_changes_special['price_abs']
+
+        # Repeat the above process for 'C' events
+        m_changes_C = pd.merge(
+            m.loc[m.type.isin(modif_type_C)].reset_index(),
+            r_m.loc[r_m.type == 'A', ['id'] + ['ticker_id'] + modif_fields_special],
+            how='left', on=['id', 'ticker_id'], suffixes=['', '_ref']).set_index('index')
+        m_changes_C.rename(columns={'price_abs_ref': 'price_ref'}, inplace=True)
+        m_changes_C['price_ref'] = m_changes_C['price_ref'] - m_changes_C['price_abs']
+
+        # add new empty columns for referenced order
+        modif_cols = [field + '_ref' for field in modif_fields]
+        m[modif_cols] = nan_val
+
+        # fill reference order types with new values
+        m.loc[m_changes.index] = m_changes
+        m.loc[m_changes_special.index] = m_changes_special
+        m.loc[m_changes_C.index] = m_changes_C
         m[modif_cols] = m[modif_cols].fillna(nan_val).astype(int)
 
         # prepare remaining columns for encoding stage (fill NaNs)
