@@ -480,9 +480,48 @@ class Transformer(nn.Module):
         flops_promised = 165e12 # RTX 4090 is cited to be 165 TFLOPS (330 TFLOPS with sparsity feature) of bloat16 running on tensor cores
         mfu = flops_achieved / flops_promised
         return mfu
+    
+    def relevant_mask(self, tok_pos, logits, vocab_encoding, device):
+        # determine field and special tokens to include
+        include_nan = False
+        if tok_pos == 0:
+            field = 'ticker'
+        elif tok_pos == 1:
+            field = 'type'
+        elif tok_pos == 2:
+            field = 'side'
+        elif tok_pos in [3, 16]:
+            field = 'sign'
+            include_nan = True
+        elif tok_pos in [4, 17]:
+            field = 'price'
+            include_nan = True
+        elif tok_pos in [5, 6, 18]:
+            field = 'size'
+            include_nan = True
+        elif tok_pos in [7, 8, 9, 10, 11, 12, 13, 14, 15]:
+            field = 'time'
+        elif tok_pos in [19, 20, 21, 22, 23]:
+            field = 'time'
+            include_nan = True
+
+        # select relevant tokens, excluding special tokens
+        if not include_nan:
+            relevant_indices = vocab_encoding[field][1][3:]
+        else:
+            relevant_indices = vocab_encoding[field][1][2:]
+        # prepare tensors for scattering
+        relevant_destination = torch.zeros(1, logits.shape[1], device=device)
+        relevant_indices = torch.tensor(relevant_indices, dtype=torch.int64, device=device).unsqueeze(0)
+        relevant_src = torch.ones(1, relevant_indices.shape[1], device=device)
+        # place the values in relevant_src at the indices in relevant_indices in relevant_destination
+        relevant_mask = relevant_destination.scatter(1, index=relevant_indices, src=relevant_src).bool()
+        # mask the indices in logits that are not relevant for the current field
+        logits.masked_fill_(~relevant_mask, float("-inf"))
+        return logits
 
     @torch.inference_mode()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, top_p = 0.9, start=False, roll=False, new_block_size=10344):
+    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, top_p = 0.9, start=False, roll=False, new_block_size=10344, vocab_encoding=None, use_relevant_mask=True):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -501,7 +540,7 @@ class Transformer(nn.Module):
         B,T = idx.shape
         # input_pos = 0
         input_pos = idx.shape[1] - 1
-        for _ in range(max_new_tokens):
+        for tok_pos in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
             idx_cond = idx if idx.size(1) <= self.params.max_seq_len else idx[:, -self.params.max_seq_len:]
             # forward the model to get the logits for the index in the sequence
@@ -521,6 +560,9 @@ class Transformer(nn.Module):
             else:
                 # pluck the logits at the final step and scale by desired temperature
                 logits = logits / temperature
+                # optionally mask indices that are not relevant for the current token field
+                if use_relevant_mask:
+                    logits = self.relevant_mask(tok_pos, logits, vocab_encoding, logits.device)
                 # optionally crop the logits to only the top k options
                 if top_k is not None:
                     v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
