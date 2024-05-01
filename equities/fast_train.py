@@ -137,10 +137,12 @@ ctx = (
 )
 
 # locate directories with training and validation data
-train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/train/')
+# train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/train/')
+train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/train/')
 train_message_files = sorted(glob(str(train_data_dir) + '/*message*.npy'))
 assert len(train_message_files) > 0, f'no message files found in {train_data_dir}'
-val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/val/')
+# val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/val/')
+val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/val/')
 val_message_files = sorted(glob(str(val_data_dir) + '/*message*.npy'))
 assert len(val_message_files) > 0, f'no message files found in {val_data_dir}'
 # fill list with datasets, seperated by file (each file is a day of data)
@@ -198,7 +200,7 @@ if init_from == "scratch":
 elif init_from == "resume":
     print(f"Resuming training from {out_dir}")
     # resume training from a checkpoint.
-    ckpt_path = os.path.join(out_dir, "ckpt_fast_v5.pt")
+    ckpt_path = os.path.join(out_dir, "ckpt_fast_v6.pt")
     checkpoint = torch.load(ckpt_path, map_location=device)
     checkpoint_model_args = checkpoint["model_args"]
     # force these config attributes to be equal otherwise we can't even resume training
@@ -321,7 +323,7 @@ while True:
                     "config": config,
                 }
                 print(f"saving checkpoint to {out_dir}")
-                torch.save(checkpoint, os.path.join(out_dir, "ckpt_fast_v5.pt"))
+                torch.save(checkpoint, os.path.join(out_dir, "ckpt_fast_v6.pt"))
     if iter_num == 0 and eval_only:
         break
 
