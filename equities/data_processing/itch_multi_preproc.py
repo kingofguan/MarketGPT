@@ -294,7 +294,8 @@ def process_book(
 if __name__ == '__main__':
     parent_folder_path, current_dir = os.path.split(os.path.abspath(''))
     load_path = '/media/hdd/data/ITCH/'
-    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/six_assets/'
+    # save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/six_assets/'
+    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/five_assets/'
     symbols_load_path = parent_folder_path + '/' + current_dir + '/dataset/symbols/'
 
     parser = argparse.ArgumentParser()
@@ -323,6 +324,8 @@ if __name__ == '__main__':
 
     # append the list of available dates from the data directory
     for f in os.listdir(msg_load_path):
+        if f != '12302019':
+            continue
         dates.append(f)
 
     for i in range(len(dates)):
@@ -333,6 +336,8 @@ if __name__ == '__main__':
         # append the list of available assets (tickers) from the dates directory
         assets = []
         for f in os.listdir(msg_date_load_path):
+            if f == 'AMZN':
+                continue
             assets.append(f)
 
         message_files = [glob(os.path.join(msg_date_load_path, assets[j]) + '/*message*.csv') for j in range(len(assets))]
