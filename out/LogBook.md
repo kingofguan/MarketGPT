@@ -6,7 +6,13 @@ Inspired by: https://github.com/facebookresearch/metaseq/blob/main/projects/OPT/
 ## 100M Model Log
 
 ### Upcoming changes
-Upcoming model revisions: re-preprocess data to account for price deviation term changes in 'C' event types, increase vocab size to nearest multiple of 64, and then re-train.
+Upcoming model revisions: Increase vocab size to nearest multiple of 64, and then re-train.
+
+### 2024-05-04 21:22 ET
+First state-space model (ssm) is trained.
+
+- SSM version #1 'ckpt_ssm.pt' was trained on the ssm/mamba.py and ssm/train_ssm.py files and was a proof-of-concept model based on the Mamba architecture by Gu and Dao (2023). The model has ~100M parameters and the same context length, training parameters, etc as the Transformer implementation.
+    - Training Run (1000 steps): https://wandb.ai/aw843/MarketSimSSM/runs/u02sr5z7?nw=nwuseraw843
 
 ### 2024-04-01 18:22 ET
 Over the last few days, the following changes have been made:
