@@ -8,6 +8,15 @@ Inspired by: https://github.com/facebookresearch/metaseq/blob/main/projects/OPT/
 ### Upcoming changes
 Upcoming model revisions: Increase vocab size to nearest multiple of 64, and then re-train.
 
+### 2024-05-15 11:14 ET
+- SSM version #3 'ckpt_ssm_v3.pt' was trained on the ssm/mamba.py and ssm/train_ssm.py files. In this version, the model parameters were increased to 735M parameters (48 layers and 1536 embedding dimensions). All other training parameters were the same as version #2. The train and val loss decreased noticeably from version #2 but was still slightly higher than the best transformers version.
+    - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimSSM/runs/zbxzystl?nw=nwuseraw843
+
+
+### 2024-05-06 18:50 ET
+- SSM version #2 'ckpt_ssm_v2.pt' was trained on the ssm/mamba.py and ssm/train_ssm.py files. Slight changes were made to the training parameters--most notably the number of training sets were increased to 4000 (same number as best Transformer model we trained) and the context length was decreased to 112 messages to make training times more manageable. The final train/val loss for the mamba-based was worse than the transformer-based model (although this is without doing any hyper-parameter sweeps for the ssm model). 
+    - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimSSM/runs/2mqx0zdf?nw=nwuseraw843
+
 ### 2024-05-04 21:22 ET
 First state-space model (ssm) is trained.
 

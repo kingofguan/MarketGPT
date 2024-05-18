@@ -28,6 +28,7 @@ sys.path.append(ROOT_DIR)
 import time
 import math
 import random
+import inspect
 from glob import glob
 # import pickle
 from contextlib import nullcontext
@@ -37,16 +38,21 @@ import torch
 import torch.nn.functional as F
 
 from equities.data_processing.itch_encoding import Vocab, encode_msgs
-# from model import GPTConfig, GPT
+# # from model import GPTConfig, GPT
 from lm import LM
-# from ssm.transformer.transformer import TransformerConfig
+# # from ssm.transformer.transformer import TransformerConfig
 from mamba import MambaConfig
-from jamba import JambaConfig
+# from jamba import JambaConfig
+
+# # official mamba package (20% faster per iteration and 40% less memory usage w/ 48 layers and 1024 embed dim)
+# from mamba_ssm.models.mixer_seq_simple import MambaLMHeadModel
+# from mamba_ssm.models.config_mamba import MambaConfig
 
 # -----------------------------------------------------------------------------
 # default config values
 # I/O
 out_dir = 'out'
+checkpoint_name = 'ckpt_ssm_v3.pt'
 eval_interval = 50 # 2000
 log_interval = 1
 eval_iters = 100 # 200
@@ -61,23 +67,23 @@ wandb_run_name = 'run' + str(time.time())
 seed = 42
 rng = random.Random(seed)
 torch.manual_seed(seed)
-msg_seq_len = 432 # 112 # 432
+msg_seq_len = 112 # 112 # 432
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 1 # 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
-block_size = 10367 # 2687 # 10367
+block_size = 2687 # 2687 # 10367
 # model
-n_layer = 24
+n_layer = 48 # 24
 # n_head = 12
-n_embd = 768
+n_embd = 1536 # 768
 # dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # bias = False # do we use bias inside LayerNorm and Linear layers?
 use_cuda_mamba = True # use CUDA implementation of Mamba
 # adamw optimizer
 learning_rate = 1e-3 # max learning rate
-max_iters = 1000 # 600000 # total number of training iterations
-weight_decay = 0.00001
+max_iters = 4000 # 600000 # total number of training iterations
+weight_decay = 0.01 # 0.00001
 beta1 = 0.9
-beta2 = 0.98
+beta2 = 0.95
 grad_clip = 1.0 # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr = True # whether to decay the learning rate
@@ -153,6 +159,7 @@ print(f"using vocab_size = {meta_vocab_size}")
 # model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
 #                   bias=bias, vocab_size=None, dropout=dropout) # start with model_args from command line
 model_args = dict(d_model=n_embd, n_layers=n_layer, use_cuda=use_cuda_mamba)
+# model_args = dict(d_model=n_embd, n_layer=n_layer, vocab_size=meta_vocab_size) # official mamba package
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
@@ -164,6 +171,10 @@ if init_from == 'scratch':
     # model = GPT(gptconf)
     model_config = MambaConfig(**model_args)
     model = LM(model_config, vocab_size=meta_vocab_size)
+
+    # # official mamba package
+    # model_config = MambaConfig(**model_args)
+    # model = MambaLMHeadModel(model_config)
 # elif init_from == 'resume':
 #     print(f"Resuming training from {out_dir}")
 #     # resume training from a checkpoint.
@@ -196,8 +207,26 @@ print("Model initialized. Number of parameters: %.2fM" % (sum([p.numel() for p i
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
-# optimizer
+# # optimizer
+# def configure_optimizers(model, weight_decay, learning_rate, betas, device_type):
+#     param_dict = {pn: p for pn, p in model.named_parameters()}
+#     param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+#     # any parameters that is 2D will be weight decayed, otherwise no. (i.e. all weight tensors in matmuls + embeddings decay, all biases and rmnsnorms don't)
+#     decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
+#     nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+#     optim_groups = [
+#         {'params': decay_params, 'weight_decay': weight_decay},
+#         {'params': nodecay_params, 'weight_decay': 0.0}
+#     ]
+#     # Create AdamW optimizer and use the fused version if it is available
+#     fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
+#     use_fused = fused_available and device_type == 'cuda'
+#     extra_args = dict(fused=True) if use_fused else dict()
+#     optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
+#     return optimizer
+
 optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
+# optimizer = configure_optimizers(model, weight_decay, learning_rate, (beta1, beta2), device_type)
 # if init_from == 'resume':
 #     optimizer.load_state_dict(checkpoint['optimizer'])
 checkpoint = None # free up memory
@@ -219,6 +248,7 @@ def estimate_loss():
             X, Y = get_batch(split)
             with ctx:
                 logits = model(X)
+                # logits = model(X).logits # official mamba package
                 loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1), ignore_index=0)
             losses[k] = loss.item()
         out[split] = losses.mean()
@@ -266,11 +296,12 @@ while True:
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
-                "train/loss": losses['train'],
-                "val/loss": losses['val'],
+                "tokens": iter_num * tokens_per_iter,
+                "loss/train": losses['train'],
+                "loss/val": losses['val'],
                 "lr": lr,
                 # "mfu": running_mfu*100, # convert to percentage
-            })
+            }, step = iter_num)
         if losses['val'] < best_val_loss or always_save_checkpoint:
             best_val_loss = losses['val']
             if iter_num > 0:
@@ -283,7 +314,7 @@ while True:
                     'config': config,
                 }
                 print(f"saving checkpoint to {out_dir}")
-                torch.save(checkpoint, os.path.join(out_dir, 'ckpt_ssm.pt'))
+                torch.save(checkpoint, os.path.join(out_dir, checkpoint_name))
     if iter_num == 0 and eval_only:
         break
 
@@ -292,6 +323,7 @@ while True:
     for micro_step in range(gradient_accumulation_steps):
         with ctx:
             logits = model(X)
+            # logits = model(X).logits # official mamba package
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1), ignore_index=0)
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
         # immediately async prefetch next batch while model is doing the forward pass on the GPU
