@@ -8,10 +8,22 @@ Inspired by: https://github.com/facebookresearch/metaseq/blob/main/projects/OPT/
 ### Upcoming changes
 Upcoming model revisions: Increase vocab size to nearest multiple of 64, and then re-train.
 
+### 2024-05-30 15:11 ET
+- A hyperparameter sweep was performed on the bpe variant of the transformer model and the results demonstrated that the hyperparameters for the previous model iteration (non-bpe) were already optimal for this new version (with bpe).
+    - Sweep (20 runs of max 500 iterations): https://wandb.ai/aw843/MarketSimT_fast/sweeps/dnp88qr4?nw=nwuseraw843
+- Model version #8 'ckpt_fast_v7.pt' was trained for 8000 steps (double that of previous versions) and did not yield a significant validation loss decrease (2.0 vs. 1.88).
+    - Training Run (8000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/mmecdb76?nw=nwuseraw843
+- Model version #9 'ckpt_fast_v8.pt' was a larger version (100M params -> 700M params) of model version #8 & #7, and it was trained for 4000 steps. The model had 1536 hidden dimensions, 24 layers and 16 heads. The model did not learn well (3.18 validation loss) and the checkpoint was deleted. The model possibly needed more time to train and, like previous versions, did not have a sufficient number of training examples.
+    - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/xa1hb1qh?nw=nwuseraw843
+
+
+### 2024-05-22 11:31 ET
+- Model version #7 'ckpt_fast_v6.pt' was trained using the equities/fast_model.py file and equities/fast_train.py file with the same training parameters as Model Version #6 + SSM version #2 (i.e., with 112 messages). The main change in this model was that it was trained using byte-pair encoded tokens (from bpe/* methods). Inference speeds improved but training loss was not as good as non-bpe trained transformer based model (possibly due to decreased amount of overall training examples as a result of bpe tokenization)
+    - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/89vr6521?nw=nwuseraw843
+    
 ### 2024-05-15 11:14 ET
 - SSM version #3 'ckpt_ssm_v3.pt' was trained on the ssm/mamba.py and ssm/train_ssm.py files. In this version, the model parameters were increased to 735M parameters (48 layers and 1536 embedding dimensions). All other training parameters were the same as version #2. The train and val loss decreased noticeably from version #2 but was still slightly higher than the best transformers version.
     - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimSSM/runs/zbxzystl?nw=nwuseraw843
-
 
 ### 2024-05-06 18:50 ET
 - SSM version #2 'ckpt_ssm_v2.pt' was trained on the ssm/mamba.py and ssm/train_ssm.py files. Slight changes were made to the training parameters--most notably the number of training sets were increased to 4000 (same number as best Transformer model we trained) and the context length was decreased to 112 messages to make training times more manageable. The final train/val loss for the mamba-based was worse than the transformer-based model (although this is without doing any hyper-parameter sweeps for the ssm model). 

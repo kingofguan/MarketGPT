@@ -24,7 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-KVCACHE = True
+KVCACHE = False # True
 
 @dataclass
 class ModelArgs:
@@ -161,7 +161,7 @@ class KVCache:
         self.key: torch.Tensor = torch.zeros(shape, device=device, dtype=dtype)
         self.value: torch.Tensor = torch.zeros(shape, device=device, dtype=dtype)
         self.max_seq_length = max_seq_length # hard code "true" cache limit for now?
-        self.encoded_tok_len = 24
+        self.encoded_tok_len = 24 # also functions as roll_len when using bpe encoding
         self.sink_tokens = 1 # 0 # 24
 
     def update(
@@ -521,7 +521,9 @@ class Transformer(nn.Module):
         return logits
 
     @torch.inference_mode()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, top_p = 0.9, start=False, roll=False, new_block_size=10344, vocab_encoding=None, use_relevant_mask=True):
+    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None, top_p = 0.9,
+                 start=False, roll=False, new_block_size=10344, vocab_encoding=None,
+                 use_relevant_mask=True, use_bpe=False, eom_token_val=0, roll_len=24):
         """
         Take a conditioning sequence of indices idx (LongTensor of shape (b,t)) and complete
         the sequence max_new_tokens times, feeding the predictions back into the model each time.
@@ -550,6 +552,9 @@ class Transformer(nn.Module):
                 x = idx_cond
                 input_pos = 0
             # print("input_pos:", input_pos)
+            if use_bpe and roll:
+                for kv_cache in self.kv_cache:
+                    kv_cache.encoded_tok_len = roll_len + 1
             # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=max_new_tokens, input_pos=input_pos)
             # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=self.params.max_seq_len, input_pos=input_pos, roll=roll)
             logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=new_block_size, input_pos=input_pos, roll=roll)
@@ -561,7 +566,7 @@ class Transformer(nn.Module):
                 # pluck the logits at the final step and scale by desired temperature
                 logits = logits / temperature
                 # optionally mask indices that are not relevant for the current token field
-                if use_relevant_mask:
+                if use_relevant_mask and not use_bpe:
                     logits = self.relevant_mask(tok_pos, logits, vocab_encoding, logits.device)
                 # optionally crop the logits to only the top k options
                 if top_k is not None:
@@ -586,5 +591,10 @@ class Transformer(nn.Module):
             roll = False
             # append sampled index to the running sequence and continue
             idx = torch.cat((idx, idx_next), dim=1)
+            if idx_next[0].item() == eom_token_val:
+                return idx, tok_pos
 
-        return idx
+        if use_bpe:
+            return idx, tok_pos
+        else:
+            return idx

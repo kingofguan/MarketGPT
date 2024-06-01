@@ -21,12 +21,18 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123
 
 import math
 import os
+from os.path import dirname, abspath
+import sys
 import time
 import random
+import pickle as pkl
 from glob import glob
 from contextlib import nullcontext
 from datetime import datetime
 # from functools import partial
+
+ROOT_DIR = dirname(dirname(abspath(__file__)))
+sys.path.append(ROOT_DIR)
 
 import numpy as np
 import torch
@@ -40,6 +46,7 @@ from fast_model import Transformer, ModelArgs
 # config values from best sweep run
 # I/O
 out_dir = "out"
+checkpoint_name = "ckpt_fast_v8.pt"
 eval_interval = 50 # 2000
 log_interval = 1
 eval_iters = 100 # 200
@@ -51,21 +58,23 @@ wandb_log = True # False # disabled by default
 wandb_project = "MarketSimT_fast"
 wandb_run_name = "run" + datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 # data
-seed = 42
+seed = 42 * 2 
 rng = random.Random(seed)
+use_bpe = True # False # if True, use byte pair encoding
 use_sink = True # if True, use a dedicated sink token at the start of every training sample (per https://arxiv.org/pdf/2309.17453.pdf)
-msg_seq_len = 432
+eom_token_val = 0 # end of message token value
+msg_seq_len = 112 # 432
 batch_size = 1 # if gradient_accumulation_steps > 1, this is the micro-batch size
-max_seq_len = 10367 # block_size
+max_seq_len = 2687 # 10367 # block_size
 if use_sink:
     max_seq_len += 1
 vocab = Vocab()
-vocab_size = 12515
+vocab_size = 12544 # 12515
 # model
-dim = 768
-n_layers = 12
-n_heads = 12
-n_kv_heads = 12
+dim = 1536 # 768
+n_layers = 24 # 12
+n_heads = 16 # 12
+n_kv_heads = 16 # 12
 multiple_of = 32
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # adamw optimizer
@@ -82,7 +91,7 @@ warmup_iters = 50 # 1000  # how many steps to warm up for
 # system
 device = "cuda"  # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype = "bfloat16"  # float32|bfloat16|float16
-compile = True # use PyTorch 2.0 to compile the model to be faster
+compile = False # True # use PyTorch 2.0 to compile the model to be faster
 # -----------------------------------------------------------------------------
 config_keys = [
     k
@@ -152,17 +161,35 @@ for file in train_message_files:
 val_datasets = []
 for file in val_message_files:
     val_datasets.append(np.load(file, mmap_mode='r'))
+# BPE encoding
+if use_bpe:
+    # load the tokenizer
+    with open('tokenizer/bpe_tokenizer.pkl', 'rb') as f:
+        bpe_tokenizer = pkl.load(f)
 # verify sink token compatibility with dataloader implementation
 if use_sink:
     assert vocab.SINK_TOK == 1
-    assert max_seq_len == 10368
+    # assert max_seq_len == 10368
 # poor man's data loader
 def get_batch(split):
     # data = train_data if split == 'train' else val_data
     datasets = train_datasets if split == 'train' else val_datasets
     data = rng.choice(datasets)
     ix = torch.randint(len(data) - msg_seq_len, (batch_size,))
-    x = torch.stack([torch.from_numpy((encode_msgs((data[i:i+msg_seq_len]).astype(np.int64), vocab.ENCODING)).reshape(-1)) for i in ix])
+    if use_bpe:
+        assert batch_size == 1, "batch size must be 1 for BPE encoding (for now)" # TODO: make this batch-wise
+        # basic encoding of the messages
+        basic_encoded = [(encode_msgs((data[i:i+msg_seq_len]).astype(np.int64), vocab.ENCODING)) for i in ix]
+        # bpe encode the messages and concat EOM token to the end
+        bpe_encoded = []
+        for batch in range(len(basic_encoded)):
+            for msg in range(len(basic_encoded[batch])):
+                bpe_encoded = bpe_encoded + bpe_tokenizer.bpe_encode(basic_encoded[batch][msg]) + [eom_token_val]
+        # convert to tensor, unsqueeze to add batch dimension
+        x = torch.tensor(bpe_encoded).unsqueeze(0)
+    else:
+        # use basic encoding only
+        x = torch.stack([torch.from_numpy((encode_msgs((data[i:i+msg_seq_len]).astype(np.int64), vocab.ENCODING)).reshape(-1)) for i in ix])
     if use_sink:
         # append sink token to start of each batch sequence (since vocab.SINK_TOK = 1, we can just use torch.ones)
         x = torch.cat([torch.ones((batch_size, 1), dtype=torch.int), x], dim=1)
@@ -200,7 +227,7 @@ if init_from == "scratch":
 elif init_from == "resume":
     print(f"Resuming training from {out_dir}")
     # resume training from a checkpoint.
-    ckpt_path = os.path.join(out_dir, "ckpt_fast_v6.pt")
+    ckpt_path = os.path.join(out_dir, checkpoint_name)
     checkpoint = torch.load(ckpt_path, map_location=device)
     checkpoint_model_args = checkpoint["model_args"]
     # force these config attributes to be equal otherwise we can't even resume training
@@ -287,6 +314,8 @@ t0 = time.time()
 local_iter_num = 0  # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model  # unwrap DDP container if needed
 running_mfu = -1.0
+print("Training is starting.")
+start_time = time.time()
 while True:
     # determine and set the learning rate for this iteration
     lr = get_lr(iter_num) if decay_lr else learning_rate
@@ -323,7 +352,7 @@ while True:
                     "config": config,
                 }
                 print(f"saving checkpoint to {out_dir}")
-                torch.save(checkpoint, os.path.join(out_dir, "ckpt_fast_v6.pt"))
+                torch.save(checkpoint, os.path.join(out_dir, checkpoint_name))
     if iter_num == 0 and eval_only:
         break
 
@@ -373,6 +402,9 @@ while True:
     # termination conditions
     if iter_num > max_iters:
         break
+
+end_time = time.time()
+print(f"Training is done. Took {(end_time-start_time)/60:.2f} minutes.")
 
 if ddp:
     destroy_process_group()
