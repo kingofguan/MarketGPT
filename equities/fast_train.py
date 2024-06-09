@@ -46,37 +46,40 @@ from fast_model import Transformer, ModelArgs
 # config values from best sweep run
 # I/O
 out_dir = "out"
-checkpoint_name = "ckpt_fast_v8.pt"
+# checkpoint_name = "ckpt_fast_v8.pt"
+# checkpoint_name = "ckpt_pretrain_v3.pt"
+checkpoint_name = "ckpt_finetune_AAPL_v3.pt"
 eval_interval = 50 # 2000
 log_interval = 1
 eval_iters = 100 # 200
 eval_only = False  # if True, script exits right after the first eval
 always_save_checkpoint = True # False  # if True, always save a checkpoint after each eval
-init_from = "scratch"  # 'scratch' or 'resume'
+init_from = "pretrained" # "scratch" # "resume" # "scratch"  # 'scratch' or 'resume' or 'pretrained'
+pretrained_checkpoint_name = "ckpt_pretrain_v3.pt"
 # wandb logging
 wandb_log = True # False # disabled by default
 wandb_project = "MarketSimT_fast"
 wandb_run_name = "run" + datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 # data
-seed = 42 * 2 
+seed = 42
 rng = random.Random(seed)
-use_bpe = True # False # if True, use byte pair encoding
+use_bpe = False # True # False # if True, use byte pair encoding
 use_sink = True # if True, use a dedicated sink token at the start of every training sample (per https://arxiv.org/pdf/2309.17453.pdf)
 eom_token_val = 0 # end of message token value
-msg_seq_len = 112 # 432
+msg_seq_len = 432 # 112 # 432
 batch_size = 1 # if gradient_accumulation_steps > 1, this is the micro-batch size
-max_seq_len = 2687 # 10367 # block_size
+max_seq_len = 10367 # 2687 # 10367 # block_size
 if use_sink:
     max_seq_len += 1
 vocab = Vocab()
-vocab_size = 12544 # 12515
+vocab_size = 12160 # 12544 # 12515
 # model
-dim = 1536 # 768
-n_layers = 24 # 12
-n_heads = 16 # 12
-n_kv_heads = 16 # 12
+dim = 768 # 1536 # 768
+n_layers = 12 # 24 # 12
+n_heads = 12 # 16 # 12
+n_kv_heads = 12 # 16 # 12
 multiple_of = 32
-dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
+dropout = 0.1 # 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # adamw optimizer
 gradient_accumulation_steps = 5 * 8 # 4 # used to simulate larger batch sizes
 learning_rate = 1e-3 # max learning rate
@@ -147,11 +150,15 @@ ctx = (
 
 # locate directories with training and validation data
 # train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/train/')
-train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/train/')
+# train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/train/')
+# train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/pre_train/')
+train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/train/')
 train_message_files = sorted(glob(str(train_data_dir) + '/*message*.npy'))
 assert len(train_message_files) > 0, f'no message files found in {train_data_dir}'
 # val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/val/')
-val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/val/')
+# val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/val/')
+# val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/pre_train/val/')
+val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/val/')
 val_message_files = sorted(glob(str(val_data_dir) + '/*message*.npy'))
 assert len(val_message_files) > 0, f'no message files found in {val_data_dir}'
 # fill list with datasets, seperated by file (each file is a day of data)
@@ -164,7 +171,8 @@ for file in val_message_files:
 # BPE encoding
 if use_bpe:
     # load the tokenizer
-    with open('tokenizer/bpe_tokenizer.pkl', 'rb') as f:
+    # with open('tokenizer/bpe_tokenizer.pkl', 'rb') as f:
+    with open('tokenizer/bpe_tokenizer_pretrain.pkl', 'rb') as f:
         bpe_tokenizer = pkl.load(f)
 # verify sink token compatibility with dataloader implementation
 if use_sink:
@@ -247,6 +255,36 @@ elif init_from == "resume":
     model.load_state_dict(state_dict)
     iter_num = checkpoint["iter_num"]
     best_val_loss = checkpoint["best_val_loss"]
+elif init_from == "pretrained":
+    print(f"Finetuning from {out_dir}")
+    # finetuning from a checkpoint.
+    ckpt_path = os.path.join(out_dir, pretrained_checkpoint_name)
+    checkpoint = torch.load(ckpt_path, map_location=device)
+    checkpoint_model_args = checkpoint["model_args"]
+    # force these config attributes to be equal otherwise we can't even resume training
+    # the rest of the attributes (e.g. dropout) can stay as desired from command line
+    for k in ["dim", "n_layers", "n_heads", "n_kv_heads", "vocab_size", "multiple_of", "max_seq_len"]:
+        model_args[k] = checkpoint_model_args[k]
+    # create the model
+    gptconf = ModelArgs(**model_args)
+    model = Transformer(gptconf)
+    state_dict = checkpoint["model"]
+    # fix the keys of the state dictionary :(
+    # honestly no idea how checkpoints sometimes get this prefix, have to debug more
+    unwanted_prefix = "_orig_mod."
+    for k, v in list(state_dict.items()):
+        if k.startswith(unwanted_prefix):
+            state_dict[k[len(unwanted_prefix) :]] = state_dict.pop(k)
+    model.load_state_dict(state_dict)
+    # iter_num = checkpoint["iter_num"]
+    # best_val_loss = checkpoint["best_val_loss"]
+
+    # # freeze the first 6 layers
+    # for param in model.transformer[:6].parameters():
+    #     param.requires_grad = False
+    # # unfreeze the last 6 layers
+    # for param in model.transformer[6:].parameters():
+    #     param.requires_grad = True
 model.to(device)
 
 # initialize a GradScaler. If enabled=False scaler is a no-op

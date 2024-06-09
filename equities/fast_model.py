@@ -24,7 +24,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-KVCACHE = False # True
+KVCACHE = True
 
 @dataclass
 class ModelArgs:

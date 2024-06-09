@@ -6,7 +6,38 @@ Inspired by: https://github.com/facebookresearch/metaseq/blob/main/projects/OPT/
 ## 100M Model Log
 
 ### Upcoming changes
-Upcoming model revisions: Increase vocab size to nearest multiple of 64, and then re-train.
+Upcoming model revisions: Jamba. Refactor bpe training method to use all most of max context length in training. Add more data/symbols to pre-training.
+
+### 2024-06-08 14:22 ET
+- Finetuned Model (AAPL) version #3 'ckpt_finetune_AAPL_v3.pt' was finetuned using the 'ckpt_pretrain_v3.pt' model checkpoint and virtually the same parameters (only exception was the number of training steps reduced to 4000 and the dropout parameter was set 0.1 to reduce odds of overfitting). The model was aligned to AAPL message dynamics by reusing the AAPL training messages exclusively during finetuning. This resulted in a new best finetuned model validation loss of 1.0825. This model also performed the best during the post-training simulation trial for AAPL (unseen test set).
+    - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/grnszt0m?nw=nwuseraw843
+
+
+### 2024-06-06 19:36 ET
+- Pretrained Model version #3 'ckpt_pretrain_v3.pt' was trained using the same parameters as 'ckpt_pretrain_v2.pt' except the context length was increased back to 432 messages. This resulted in a new best model final validation loss of 1.169. In the post-training simulation trial for AAPL (unseen test set), the pretrained model was able to perform exceptionally well: it produced a relatively low error rate and qualitatively great results wrt the price trajectory and order type distribution. Interestingly, it never produced a symbol error. Similar to how LLMs have great in-context learning capabilities, it appears that the pretrained model was able to learn to generate realistic AAPL msgs just from the prompt/initial context.
+    - Training Run (8000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/i0j93wpq?nw=nwuseraw843
+
+
+### 2024-06-05 17:42 ET
+- Pretrained Model version #2 'ckpt_pretrain_v2.pt' was trained using the same parameters as 'ckpt_pretrain_v1.pt' except bpe tokenization was disabled and training steps were increased to 8000. The final val loss was 1.419 which was an improvement over all other methods besides the elusive 'ckpt_fast_v5.pt' (1.364). In the post-training simulation trial for AAPL (unseen test set), the pretrained model was unable to generate messages consistently (not suprisingly, the model kept producing symbol errors).
+    - Training Run (8000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/hqa361yz?nw=nwuseraw843
+- Finetuned Model (AAPL) version #2 'ckpt_finetune_AAPL_v2.pt' was finetuned using the 'ckpt_pretrain_v2.pt' model checkpoint and virtually the same parameters (only exception was the max and min learning rate---which were reduced to 6e-5 and 8e-7, respectively). The model was aligned to AAPL message dynamics by reusing the AAPL training messages exclusively during finetuning. The model failed to reduce the training loss any further (it was virtually the same and took all 8000 time steps to reach that mark). However, in the post-training simulation trial for AAPL (unseen test set), the finetuned model was able to generate messages with similar but slightly worse performance (evaluation not exhaustive but initial results show that it appears worse wrt everything: error rate, price trajectory, order type distribution) to the prev best model ('ckpt_fast_v5.pt').
+    - Training Run (8000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/f1xvuxgi?nw=nwuseraw843
+
+
+### 2024-06-05 13:50 ET
+First Finetuned model (AAPL) is trained.
+
+- Finetuned Model (AAPL) version #1 'ckpt_finetune_AAPL_v1.pt' was finetuned using the 'ckpt_pretrain_v1.pt' model checkpoint and virtually the same parameters (only exception being 4000 steps). The model was aligned to AAPL message dynamics by reusing the AAPL training messages exclusively during finetuning. During finetuning, initially, the loss shot up beyond the final validation loss of the pretrained model but eventually dropped below the pretrained loss (albeit not by much--the final val loss was 1.84). In the post-training simulation trial for AAPL (unseen test set), the finetuned model performed better than its pretrained counterpart, however the same issues were still observed (just slightly better).
+    - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/gwqk4415?nw=nwuseraw843
+
+
+### 2024-06-04 23:47 ET
+First Pretained model (20+ symbols) is trained.
+
+- Pretrained Model version #1 'ckpt_pretrain_v1.pt' was trained using the equities/fast_model.py file and equities/fast_train.py file with the new bpe tokenization enabled. The new vocab size was set to 12160 (elbow of tokenization curve + nearest multiple of 64 for hardware efficiency). The model was trained on a dataset of 20 tickers corresponding to the first 20 lines of the symbols/custom_symbols.txt file. The model was trained for 6000 steps with other params the same as 'ckpt_fast_v6.pt'. The model had a unique loss curve (sudden steep drop around 1k tokens) and reached a final val loss of ~1.9 (worse than best prev model 'ckpt_fast_v5.pt'). The model was able to generate messages in the post-training simulation trial for AAPL (unseen test set). However, the error rate was very high and the price trajectory/order type were quite poor (qualitatively).
+    - Training Run (6000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/901qi0aq?nw=nwuseraw843
+
 
 ### 2024-05-30 15:11 ET
 - A hyperparameter sweep was performed on the bpe variant of the transformer model and the results demonstrated that the hyperparameters for the previous model iteration (non-bpe) were already optimal for this new version (with bpe).
