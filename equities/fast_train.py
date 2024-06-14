@@ -47,15 +47,15 @@ from fast_model import Transformer, ModelArgs
 # I/O
 out_dir = "out"
 # checkpoint_name = "ckpt_fast_v8.pt"
-# checkpoint_name = "ckpt_pretrain_v3.pt"
-checkpoint_name = "ckpt_finetune_AAPL_v3.pt"
+# checkpoint_name = "ckpt_pretrain_v4.pt"
+checkpoint_name = "ckpt_finetune_AAPL_v4.pt"
 eval_interval = 50 # 2000
 log_interval = 1
 eval_iters = 100 # 200
 eval_only = False  # if True, script exits right after the first eval
 always_save_checkpoint = True # False  # if True, always save a checkpoint after each eval
 init_from = "pretrained" # "scratch" # "resume" # "scratch"  # 'scratch' or 'resume' or 'pretrained'
-pretrained_checkpoint_name = "ckpt_pretrain_v3.pt"
+pretrained_checkpoint_name = "ckpt_pretrain_v4.pt"
 # wandb logging
 wandb_log = True # False # disabled by default
 wandb_project = "MarketSimT_fast"
@@ -63,12 +63,14 @@ wandb_run_name = "run" + datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 # data
 seed = 42
 rng = random.Random(seed)
-use_bpe = False # True # False # if True, use byte pair encoding
-use_sink = True # if True, use a dedicated sink token at the start of every training sample (per https://arxiv.org/pdf/2309.17453.pdf)
-eom_token_val = 0 # end of message token value
 msg_seq_len = 432 # 112 # 432
 batch_size = 1 # if gradient_accumulation_steps > 1, this is the micro-batch size
 max_seq_len = 10367 # 2687 # 10367 # block_size
+use_bpe = True # False # if True, use byte pair encoding
+use_sink = True # if True, use a dedicated sink token at the start of every training sample (per https://arxiv.org/pdf/2309.17453.pdf)
+eom_token_val = 0 # end of message token value
+bpe_comp_ratio = 1.56 # bpe compression ratio
+bpe_seq_len = int(msg_seq_len * bpe_comp_ratio)
 if use_sink:
     max_seq_len += 1
 vocab = Vocab()
@@ -83,7 +85,7 @@ dropout = 0.1 # 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 # adamw optimizer
 gradient_accumulation_steps = 5 * 8 # 4 # used to simulate larger batch sizes
 learning_rate = 1e-3 # max learning rate
-max_iters = 4000 # 100000 # total number of training iterations
+max_iters = 4000 # 8000 # 100000 # total number of training iterations
 weight_decay = 0.00001
 beta1 = 0.9
 beta2 = 0.98
@@ -187,12 +189,18 @@ def get_batch(split):
     if use_bpe:
         assert batch_size == 1, "batch size must be 1 for BPE encoding (for now)" # TODO: make this batch-wise
         # basic encoding of the messages
-        basic_encoded = [(encode_msgs((data[i:i+msg_seq_len]).astype(np.int64), vocab.ENCODING)) for i in ix]
+        # basic_encoded = [(encode_msgs((data[i:i+msg_seq_len]).astype(np.int64), vocab.ENCODING)) for i in ix]
+        basic_encoded = [(encode_msgs((data[i:i+bpe_seq_len]).astype(np.int64), vocab.ENCODING)) for i in ix]
         # bpe encode the messages and concat EOM token to the end
         bpe_encoded = []
         for batch in range(len(basic_encoded)):
             for msg in range(len(basic_encoded[batch])):
-                bpe_encoded = bpe_encoded + bpe_tokenizer.bpe_encode(basic_encoded[batch][msg]) + [eom_token_val]
+                encoded_msg = bpe_tokenizer.bpe_encode(basic_encoded[batch][msg]) + [eom_token_val]
+                if (len(encoded_msg) + len(bpe_encoded)) <= (msg_seq_len * 24):
+                    bpe_encoded = bpe_encoded + encoded_msg
+                else:
+                    break
+                # bpe_encoded = bpe_encoded + bpe_tokenizer.bpe_encode(basic_encoded[batch][msg]) + [eom_token_val]
         # convert to tensor, unsqueeze to add batch dimension
         x = torch.tensor(bpe_encoded).unsqueeze(0)
     else:

@@ -6,7 +6,17 @@ Inspired by: https://github.com/facebookresearch/metaseq/blob/main/projects/OPT/
 ## 100M Model Log
 
 ### Upcoming changes
-Upcoming model revisions: Jamba. Refactor bpe training method to use all most of max context length in training. Add more data/symbols to pre-training.
+Upcoming model revisions: Jamba. Add more data/symbols to pre-training.
+
+### 2024-06-12 11:42 ET
+- Finetuned Model (AAPL) version #4 'ckpt_finetune_AAPL_v4.pt' was finetuned using the 'ckpt_pretrain_v4.pt' model checkpoint and virtually the same parameters (only exception was the number of training steps reduced to 4000 and the dropout parameter was set 0.1 to reduce odds of overfitting). The model was aligned to AAPL message dynamics by reusing the AAPL training messages exclusively during finetuning. This did not improve the validation loss over the pretrained version. However, the model did perform better during the post-training simulation trial for AAPL (unseen test set)--although it was not as good as the non-bpe version.
+    - Training Run (4000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/e08la123?nw=nwuseraw843
+
+
+### 2024-06-11 12:07 ET
+- Pretrained Model version #4 'ckpt_pretrain_v4.pt' was trained using the same parameters as 'ckpt_pretrain_v3.pt' except the refactored bpe was enabled (the bpe training method was refactored to use most of max context length in training). This resulted in a final validation loss of 1.355, which was the best of all bpe based models. In the post-training simulation trial for AAPL (unseen test set), the pretrained model performed decently. The errors were slightly higher what is observed for well-learned models and the errors themselves were more diverse (there was sampling and symbol errors observed). These results are encouraging and show that we are closer to a model which both runs much faster and performs well.
+    - Training Run (8000 steps): https://wandb.ai/aw843/MarketSimT_fast/runs/77sypefg?nw=nwuseraw843
+
 
 ### 2024-06-08 14:22 ET
 - Finetuned Model (AAPL) version #3 'ckpt_finetune_AAPL_v3.pt' was finetuned using the 'ckpt_pretrain_v3.pt' model checkpoint and virtually the same parameters (only exception was the number of training steps reduced to 4000 and the dropout parameter was set 0.1 to reduce odds of overfitting). The model was aligned to AAPL message dynamics by reusing the AAPL training messages exclusively during finetuning. This resulted in a new best finetuned model validation loss of 1.0825. This model also performed the best during the post-training simulation trial for AAPL (unseen test set).
