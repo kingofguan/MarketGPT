@@ -615,3 +615,7 @@ truncating 0.5735% of prices < -999
 V 12282018
 truncating 0.0425% of prices > 999
 truncating 0.0257% of prices < -999
+
+SPY 10302019 (full_view version)
+truncating 0.0265% of prices > 999
+truncating 0.1171% of prices < -999

@@ -48,14 +48,15 @@ from fast_model import Transformer, ModelArgs
 out_dir = "out"
 # checkpoint_name = "ckpt_fast_v8.pt"
 # checkpoint_name = "ckpt_pretrain_v4.pt"
-checkpoint_name = "ckpt_finetune_AAPL_v4.pt"
+# checkpoint_name = "ckpt_finetune_AAPL_v4.pt"
+checkpoint_name = "ckpt_finetune_SPY_v1.pt"
 eval_interval = 50 # 2000
 log_interval = 1
 eval_iters = 100 # 200
 eval_only = False  # if True, script exits right after the first eval
 always_save_checkpoint = True # False  # if True, always save a checkpoint after each eval
 init_from = "pretrained" # "scratch" # "resume" # "scratch"  # 'scratch' or 'resume' or 'pretrained'
-pretrained_checkpoint_name = "ckpt_pretrain_v4.pt"
+pretrained_checkpoint_name = "ckpt_pretrain_v3.pt"
 # wandb logging
 wandb_log = True # False # disabled by default
 wandb_project = "MarketSimT_fast"
@@ -66,7 +67,7 @@ rng = random.Random(seed)
 msg_seq_len = 432 # 112 # 432
 batch_size = 1 # if gradient_accumulation_steps > 1, this is the micro-batch size
 max_seq_len = 10367 # 2687 # 10367 # block_size
-use_bpe = True # False # if True, use byte pair encoding
+use_bpe = False # True # False # if True, use byte pair encoding
 use_sink = True # if True, use a dedicated sink token at the start of every training sample (per https://arxiv.org/pdf/2309.17453.pdf)
 eom_token_val = 0 # end of message token value
 bpe_comp_ratio = 1.56 # bpe compression ratio
@@ -154,13 +155,15 @@ ctx = (
 # train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/train/')
 # train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/train/')
 # train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/pre_train/')
-train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/train/')
+# train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/train/')
+train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/SPY/train/')
 train_message_files = sorted(glob(str(train_data_dir) + '/*message*.npy'))
 assert len(train_message_files) > 0, f'no message files found in {train_data_dir}'
 # val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/val/')
 # val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/val/')
 # val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/pre_train/val/')
-val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/val/')
+# val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/val/')
+val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/SPY/val/')
 val_message_files = sorted(glob(str(val_data_dir) + '/*message*.npy'))
 assert len(val_message_files) > 0, f'no message files found in {val_data_dir}'
 # fill list with datasets, seperated by file (each file is a day of data)

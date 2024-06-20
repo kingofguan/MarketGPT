@@ -384,10 +384,12 @@ def process_book(
 
 if __name__ == '__main__':
     parent_folder_path, current_dir = os.path.split(os.path.abspath(''))
-    load_path = '/media/hdd/data/ITCH/'
+    # load_path = '/media/hdd/data/ITCH/'
+    load_path = '/media/hdd/data/ITCH/tmp/' # temp folder for generating full_view data for specific assets
     # save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/six_assets/'
     # save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/five_assets/'
-    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/pre_train/'
+    # save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/pre_train/'
+    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/pre_train/full_view/'
     symbols_load_path = parent_folder_path + '/' + current_dir + '/dataset/symbols/'
 
     parser = argparse.ArgumentParser()
