@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 from typing import Dict, List, Optional, Tuple
 
 from .orders import LimitOrder, Side

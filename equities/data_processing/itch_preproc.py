@@ -1,3 +1,11 @@
+"""
+This code was built on the work of the authors of the paper "Generative AI for End-to-End Limit Order Book Modelling: A Token-Level Autoregressive Generative Model of Message Flow Using a Deep State Space Network"
+
+The original code can be found at: https://github.com/peernagy/LOBS5/blob/main/lob/preproc.py
+
+I refactored the code to work with the ITCH datasets (with my custom fields) and the 'itch_encoding.py' file.
+"""
+
 from __future__ import annotations
 import argparse
 from pathlib import Path
@@ -12,41 +20,6 @@ from itch_encoding import Vocab, Message_Tokenizer
 
 import os
 import sys
-
-# def transform_L2_state(
-#         book: np.array,
-#         price_levels: int,
-#         tick_size: int = 100,
-#         #divide_by: int = 1,
-#     ) -> np.array:
-#     """ Transformation for data loading:
-#         Converts L2 book state from data to price_levels many volume
-#         series used as input to the model. The first element (column) of the
-#         input and output is the change in mid price.
-#         Converts sizes to negative sizes for ask side (sell orders).
-#     """
-#     delta_p_mid, book = book[:1], book[1:]
-#     book = book.reshape((-1,2))
-#     mid_price = np.ceil((book[0, 0] + book[1, 0]) / (2*tick_size)).__mul__(tick_size).astype(int)
-#     book = book.at[:, 0].set((book[:, 0] - mid_price) // tick_size)
-#     # change relative prices to indices
-#     book = book.at[:, 0].set(book[:, 0] + price_levels // 2)
-#     # set to out of bounds index, so that we can use -1 to indicate nan
-#     # out of bounds will be ignored in setting value in jax
-#     book = np.where(book < 0, -price_levels-1, book)
-
-#     mybook = np.zeros(price_levels, dtype=np.int32)
-#     mybook = mybook.at[book[:, 0]].set(book[:, 1])
-    
-#     # set ask volume to negative (sell orders)
-#     mybook = mybook.at[price_levels // 2:].set(mybook[price_levels // 2:] * -1)
-#     mybook = np.concatenate((
-#         delta_p_mid.astype(np.float32),
-#         mybook.astype(np.float32) / 1000
-#     ))
-
-#     # return mybook.astype(np.float32) #/ divide_by
-#     return mybook 
 
 
 def load_message_df(m_f: str) -> pd.DataFrame:

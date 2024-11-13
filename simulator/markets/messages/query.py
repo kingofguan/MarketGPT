@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 from abc import ABC
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple

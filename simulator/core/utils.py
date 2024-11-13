@@ -1,4 +1,6 @@
 """
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+
 General purpose utility functions for the simulator, attached to no particular class.
 Available to any agent or other module/utility.  Should not require references to
 any simulator object (kernel, agent, etc).
@@ -154,56 +156,3 @@ def parse_logs_df(end_state: dict) -> pd.DataFrame:
 
     return pd.concat(dfs)
 
-
-# # caching utils: not used by simulator but useful to have
-# def input_sha_wrapper(func: Callable) -> Callable:
-#     """
-#     compute a sha for the function call by looking at function name and inputs for the call
-#     """
-
-#     def inner(*args, **kvargs):
-#         argspec = inspect.getfullargspec(func)
-#         index_first_kv = len(argspec.args) - (
-#             len(argspec.defaults) if argspec.defaults != None else 0
-#         )
-#         if len(argspec.args) > 0:
-#             total_kvargs = dict(
-#                 (k, v) for k, v in zip(argspec.args[index_first_kv:], argspec.defaults)
-#             )
-#         else:
-#             total_kvargs = {}
-#         total_kvargs.update(kvargs)
-#         input_sha = (
-#             func.__name__
-#             + "_"
-#             + hashlib.sha1(str.encode(str((args, total_kvargs)))).hexdigest()
-#         )
-#         return {"input_sha": input_sha}
-
-#     return inner
-
-
-# def cache_wrapper(
-#     func: Callable, cache_dir="cache/", force_recompute=False
-# ) -> Callable:
-#     """
-#     local caching decorator
-#     checks the functional call sha is only there is specified directory
-#     """
-
-#     def inner(*args, **kvargs):
-#         if not os.path.isdir(cache_dir):
-#             os.mkdir(cache_dir)
-#         sha_call = input_sha_wrapper(func)(*args, **kvargs)
-#         cache_path = cache_dir + sha_call["input_sha"] + ".pkl"
-#         if os.path.isfile(cache_path) and not force_recompute:
-#             with open(cache_path, "rb") as handle:
-#                 result = pickle.load(handle)
-#             return result
-#         else:
-#             result = func(*args, **kvargs)
-#             with open(cache_path, "wb") as handle:
-#                 pickle.dump(result, handle)
-#             return result
-
-#     return inner

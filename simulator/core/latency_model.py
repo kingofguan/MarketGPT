@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 from typing import Union
 
 import numpy as np

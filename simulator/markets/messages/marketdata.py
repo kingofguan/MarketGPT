@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 import sys
 from abc import ABC
 from dataclasses import dataclass, field

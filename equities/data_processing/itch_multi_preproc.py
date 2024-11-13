@@ -1,3 +1,11 @@
+"""
+This code was built on the work of the authors of the paper "Generative AI for End-to-End Limit Order Book Modelling: A Token-Level Autoregressive Generative Model of Message Flow Using a Deep State Space Network"
+
+The original code can be found at: https://github.com/peernagy/LOBS5/blob/main/lob/preproc.py
+
+I refactored the code to work with the ITCH datasets (with my custom fields), multiple tickers, and the 'itch_encoding.py' file.
+"""
+
 from __future__ import annotations
 import argparse
 from pathlib import Path

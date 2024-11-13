@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/alxndrTL/mamba.py
+"""
+
 import math
 
 import torch

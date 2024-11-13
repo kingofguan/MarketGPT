@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 from copy import deepcopy
 
 from markets.messages.orderbook import OrderAcceptedMsg, OrderExecutedMsg

@@ -1,3 +1,11 @@
+"""
+This code was built on the work of the authors of the paper "Generative AI for End-to-End Limit Order Book Modelling: A Token-Level Autoregressive Generative Model of Message Flow Using a Deep State Space Network"
+
+The original code can be found at: https://github.com/peernagy/LOBS5/blob/main/lob/encoding.py
+
+I refactored the code to work with the ITCH datasets (with my custom fields), multiple tickers, and without the use of JAX.
+"""
+
 from typing import Dict, Optional, Tuple
 import numpy as np
 import pandas as pd

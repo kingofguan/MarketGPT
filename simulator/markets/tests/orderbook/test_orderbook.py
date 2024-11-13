@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 from markets.order_book import OrderBook
 
 from . import FakeExchangeAgent, SYMBOL

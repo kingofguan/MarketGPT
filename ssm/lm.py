@@ -1,4 +1,6 @@
 """
+This code was ported from: https://github.com/alxndrTL/mamba.py
+
 Universal language model, which accepts as its core a Transformer or a Mamba.
 
 The Transformer is implemented in PyTorch and supports FlashAttention-2/

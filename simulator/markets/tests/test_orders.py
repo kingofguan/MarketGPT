@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 from os.path import dirname, abspath
 import sys
 SIM_DIR = dirname(dirname(dirname(abspath(__file__))))

@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 import logging
 from copy import deepcopy
 from typing import Any, List, Optional, Tuple

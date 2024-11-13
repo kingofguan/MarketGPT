@@ -1,3 +1,7 @@
+"""
+This code was ported from: https://github.com/jpmorganchase/abides-jpmc-public
+"""
+
 from dataclasses import dataclass, field
 from typing import ClassVar, List
 

@@ -1,3 +1,7 @@
+"""
+!!!!! depracated -> use notebooks/simulate.ipynb !!!!!
+"""
+
 from os.path import dirname, abspath, join
 import sys
 

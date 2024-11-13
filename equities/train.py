@@ -1,4 +1,7 @@
 """
+!!!!! depracated -> use equities/fast_train.py !!!!!
+
+
 This script is based on nanoGPT by Karpathy: https://github.com/karpathy/nanoGPT
 
 This training script can be run both on a single gpu in debug mode,

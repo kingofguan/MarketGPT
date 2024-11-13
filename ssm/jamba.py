@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from mamba import MambaConfig, MambaBlock, RMSNorm
 
 """
+This code was ported from: https://github.com/alxndrTL/mamba.py
 
 This file implements the Jamba architecture, as proposed by AI21labs (altough others have proposed blending Mamba & attention in the past).
 A Jamba model combines Mamba and attention layers, as well as MoE for the MLP blocks.
