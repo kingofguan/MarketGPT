@@ -243,7 +243,8 @@ class Vocab:
         self._add_field('price', range(1000), [1]) # TODO: consider expanding this for high-priced stocks (e.g., pre-split AMZN)
         self._add_field('sign', [-1, 1], None)
         self._add_field('side', [0, 1], None)
-        self._add_field('ticker', range(1,504), None) # limit to S&P500 for now
+        # self._add_field('ticker', range(1,504), None) # limit to S&P500 for now
+        self._add_field('ticker', range(1, 100), None) # limit to 100 custom symbols for now
 
     def __len__(self):
         return self.counter
@@ -497,16 +498,21 @@ class Message_Tokenizer:
         """
         # encode prices relative to (previous) reference price
         p = p - p_ref
+        log_path = '/home/aaron/Documents/Github/MarketSimT/log/data_price_trunc_metrics.txt'
+        outfile = open(log_path, 'a')
         # truncate price at deviation of x
         # min tick is 100, hence min 10-level diff is 900
         # <= 1000 covers ~99.54% on bid side, ~99.1% on ask size (GOOG)
         # 1000 limit doesn't work as well for high-priced stocks (e.g., pre-split AMZN)
         pct_changed = 100 * len(p.loc[p > p_upper_trunc]) / len(p)
         print(f"truncating {pct_changed:.4f}% of prices > {p_upper_trunc}")
+        outfile.write(f"truncating {pct_changed:.4f}% of prices > {p_upper_trunc}\n")
         p.loc[p > p_upper_trunc] = p_upper_trunc
         pct_changed = 100 * len(p.loc[p < p_lower_trunc]) / len(p)
         print(f"truncating {pct_changed:.4f}% of prices < {p_lower_trunc}")
+        outfile.write(f"truncating {pct_changed:.4f}% of prices < {p_lower_trunc}\n")
         p.loc[p < p_lower_trunc] = p_lower_trunc
+        outfile.close()
         # scale prices to min ticks size differences
         p /= 1
         return p

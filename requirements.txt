@@ -6,3 +6,6 @@ pytest
 tqdm
 wandb
 # install pytorch nightly from pytorch.org
+
+# for ssm:
+# build caual-conv1d and mamba from source (git clone, cd, pip install .)

@@ -41,12 +41,10 @@ def load_message_df(m_f: str) -> pd.DataFrame:
     # messages.time = messages.time.apply(lambda x: Decimal(x))
     return messages
 
-
 def process_message_files(
         message_files: list[str],
         book_files: list[str],
         symbols_file: str,
-        assets: list[str],
         save_dir: str,
         filter_above_lvl: Optional[int] = None,
         skip_existing: bool = False,
@@ -62,6 +60,99 @@ def process_message_files(
     with open(symbols_file) as f:
         idx = 0
         for line in f:
+            if line.strip() == 'FB': # fix rebrand to work with symbol file
+                line = 'META'
+            idx += 1
+            tickers[line.strip()] = idx
+
+    assert len(message_files) == len(book_files)
+    for m_f, b_f in tqdm(zip(message_files, book_files)):
+        m_f, b_f = m_f[0], b_f[0]
+        print(m_f)
+        m_path = save_dir + m_f.rsplit('/', maxsplit=1)[-1][:-4] + '_proc.npy'
+        date = m_f.rsplit('/', maxsplit=1)[-1][:8]
+        symbol = m_f.rsplit('/', maxsplit=1)[-1][:-12].rsplit('_', maxsplit=1)[-1]
+        if symbol == 'FB': # fix rebrand to work with symbol file
+            symbol = 'META'
+        print('symbol:', symbol)
+        if skip_existing and Path(m_path).exists():
+            print('skipping', m_path)
+            continue
+        # write the symbol and date to a file
+        parent_folder_path, current_dir = os.path.split(os.path.abspath(''))
+        log_file = parent_folder_path + '/' + current_dir + '/log/data_price_trunc_metrics.txt'
+        with open(log_file, 'a') as f:
+            f.write('\n') # add blank line
+            f.write(symbol + ' ' + date + '\n')
+        
+        messages = load_message_df(m_f)
+
+        book = pd.read_csv(
+            b_f,
+        )
+        assert len(messages) == len(book)
+
+        if filter_above_lvl:
+            book = book.iloc[:, :filter_above_lvl * 4 + 1]
+            messages, book = filter_by_lvl(messages, book, filter_above_lvl)
+
+        # remove mpid field from ITCH data
+        messages = messages.drop(columns=['mpid'])
+
+        # remove pre-market and after-market hours from ITCH data
+        if remove_premarket:
+            messages = messages[messages['time'] >= 34200000000000]
+        if remove_aftermarket:
+            messages = messages[messages['time'] <= 57600000000000]
+
+        # format time for pre-processing
+        messages['time'] = messages['time'].astype('string')
+        messages['time'] = messages['time'].apply(lambda x: '.'.join((x[0:5], x[5:])))
+        messages['time'] = messages['time'].apply(lambda x: Decimal(x))
+
+        # convert price to pennies from dollars
+        messages['price'] = (messages['price'] * 100).astype('int')
+        messages['oldPrice'] = (messages['oldPrice'] * 100) # make int after dealing with NaNs
+        
+        print('<< pre processing >>')
+        m_ = tok.preproc(messages, book)
+
+        # prepend column with ticker ID
+        ticker_id = tickers[symbol]
+        m_ = np.concatenate([np.full((m_.shape[0], 1), ticker_id), m_], axis=1)
+
+        # save processed messages
+        np.save(m_path, m_)
+        print('saved to', m_path)
+
+
+def process_message_files_merge(
+        message_files: list[str],
+        book_files: list[str],
+        symbols_file: str,
+        assets: list[str],
+        save_dir: str,
+        filter_above_lvl: Optional[int] = None,
+        skip_existing: bool = False,
+        remove_premarket: bool = False,
+        remove_aftermarket: bool = False,
+    ) -> None:
+
+    v = Vocab()
+    tok = Message_Tokenizer()
+
+    for i in range(len(assets)):
+        # fix rebrand to work with symbol file
+        if assets[i] == 'FB':
+            assets[i] = 'META'
+
+    # create ticker symbol mapping
+    tickers = {}
+    with open(symbols_file) as f:
+        idx = 0
+        for line in f:
+            if line.strip() == 'FB': # fix rebrand to work with symbol file
+                line = 'META'
             idx += 1
             tickers[line.strip()] = idx
 
@@ -293,9 +384,12 @@ def process_book(
 
 if __name__ == '__main__':
     parent_folder_path, current_dir = os.path.split(os.path.abspath(''))
-    load_path = '/media/hdd/data/ITCH/'
+    # load_path = '/media/hdd/data/ITCH/'
+    load_path = '/media/hdd/data/ITCH/tmp/' # temp folder for generating full_view data for specific assets
     # save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/six_assets/'
-    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/five_assets/'
+    # save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/five_assets/'
+    # save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/pre_train/'
+    save_path = parent_folder_path + '/' + current_dir + '/dataset/proc/ITCH/multi/pre_train/full_view/'
     symbols_load_path = parent_folder_path + '/' + current_dir + '/dataset/symbols/'
 
     parser = argparse.ArgumentParser()
@@ -313,19 +407,21 @@ if __name__ == '__main__':
     parser.add_argument("--use_raw_book_repr", action='store_true', default=False)
     parser.add_argument("--remove_premarket", action='store_true', default=False)
     parser.add_argument("--remove_aftermarket", action='store_true', default=False)
+    parser.add_argument("--merge", action='store_true', default=False)
     args = parser.parse_args()
 
     assert not (args.messages_only and args.book_only)
 
-    symbols_file = sorted(glob(symbols_load_path + '*sp500*.txt'))[0]
+    # symbols_file = sorted(glob(symbols_load_path + '*sp500*.txt'))[0]
+    symbols_file = sorted(glob(symbols_load_path + '*custom*.txt'))[0]
     msg_load_path = load_path + 'messages/'
     book_load_path = load_path + 'book/'
     dates = []
 
     # append the list of available dates from the data directory
     for f in os.listdir(msg_load_path):
-        if f != '12302019':
-            continue
+        # if f != '12302019':
+        #     continue
         dates.append(f)
 
     for i in range(len(dates)):
@@ -336,8 +432,8 @@ if __name__ == '__main__':
         # append the list of available assets (tickers) from the dates directory
         assets = []
         for f in os.listdir(msg_date_load_path):
-            if f == 'AMZN':
-                continue
+            # if f == 'AMZN':
+            #     continue
             assets.append(f)
 
         message_files = [glob(os.path.join(msg_date_load_path, assets[j]) + '/*message*.csv') for j in range(len(assets))]
@@ -349,17 +445,30 @@ if __name__ == '__main__':
 
         if not args.book_only:
             print('processing messages...')
-            process_message_files(
-                message_files,
-                book_files,
-                symbols_file,
-                assets,
-                args.save_dir,
-                filter_above_lvl=args.filter_above_lvl,
-                skip_existing=args.skip_existing,
-                remove_premarket=args.remove_premarket,
-                remove_aftermarket=args.remove_aftermarket,
-            )
+            if args.merge:
+                process_message_files_merge(
+                    message_files,
+                    book_files,
+                    symbols_file,
+                    assets,
+                    args.save_dir,
+                    filter_above_lvl=args.filter_above_lvl,
+                    skip_existing=args.skip_existing,
+                    remove_premarket=args.remove_premarket,
+                    remove_aftermarket=args.remove_aftermarket,
+                )
+            else:
+                process_message_files(
+                    message_files,
+                    book_files,
+                    symbols_file,
+                    # assets, # not needed for non-merge
+                    args.save_dir,
+                    filter_above_lvl=args.filter_above_lvl,
+                    skip_existing=args.skip_existing,
+                    remove_premarket=args.remove_premarket,
+                    remove_aftermarket=args.remove_aftermarket,
+                )
         else:
             print('Skipping message processing...')
         print()

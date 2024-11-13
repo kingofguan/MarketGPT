@@ -9,12 +9,18 @@ $ python3 equities/train_sweep.py config/fast_model.yaml --count=5
 import argparse
 import math
 import os
+from os.path import dirname, abspath
+import sys
 import time
 import random
+import pickle as pkl
 from glob import glob
 from contextlib import nullcontext
 from datetime import datetime
 import yaml
+
+ROOT_DIR = dirname(dirname(abspath(__file__)))
+sys.path.append(ROOT_DIR)
 
 import numpy as np
 import wandb
@@ -25,12 +31,25 @@ from fast_model import Transformer, ModelArgs
 
 
 # poor man's data loader
-def get_batch(split, train_datasets, val_datasets, vocab, config, rng, device_type='cuda', use_sink=True):
+def get_batch(split, train_datasets, val_datasets, vocab, config, rng, device_type='cuda', use_sink=True, bpe_tokenizer=None):
     # data = train_data if split == 'train' else val_data
     datasets = train_datasets if split == 'train' else val_datasets
     data = rng.choice(datasets)
     ix = torch.randint(len(data) - config.msg_seq_len, (config.batch_size,))
-    x = torch.stack([torch.from_numpy((encode_msgs((data[i:i+config.msg_seq_len]).astype(np.int64), vocab.ENCODING)).reshape(-1)) for i in ix])
+    if config.use_bpe:
+        assert config.batch_size == 1, "batch size must be 1 for BPE encoding (for now)" # TODO: make this batch-wise
+        # basic encoding of the messages
+        basic_encoded = [(encode_msgs((data[i:i+config.msg_seq_len]).astype(np.int64), vocab.ENCODING)) for i in ix]
+        # bpe encode the messages and concat EOM token to the end
+        bpe_encoded = []
+        for batch in range(len(basic_encoded)):
+            for msg in range(len(basic_encoded[batch])):
+                bpe_encoded = bpe_encoded + bpe_tokenizer.bpe_encode(basic_encoded[batch][msg]) + [config.eom_token_val]
+        # convert to tensor, unsqueeze to add batch dimension
+        x = torch.tensor(bpe_encoded).unsqueeze(0)
+    else:
+        # use basic encoding only
+        x = torch.stack([torch.from_numpy((encode_msgs((data[i:i+config.msg_seq_len]).astype(np.int64), vocab.ENCODING)).reshape(-1)) for i in ix])
     if use_sink:
         # append sink token to start of each batch sequence (since vocab.SINK_TOK = 1, we can just use torch.ones)
         x = torch.cat([torch.ones((config.batch_size, 1), dtype=torch.int), x], dim=1)
@@ -47,13 +66,13 @@ def get_batch(split, train_datasets, val_datasets, vocab, config, rng, device_ty
 
 # helps estimate an arbitrarily accurate loss over either split using many batches
 @torch.no_grad()
-def estimate_loss(model, raw_model, ctx, train_datasets, val_datasets, vocab, config, rng, device_type='cuda'):
+def estimate_loss(model, raw_model, ctx, train_datasets, val_datasets, vocab, config, rng, device_type='cuda', bpe_tokenizer=None):
     out = {}
     model.eval()
     for split in ["train", "val"]:
         losses = torch.zeros(config.eval_iters)  # keep on CPU
         for k in range(config.eval_iters):
-            X, Y = get_batch(split, train_datasets, val_datasets, vocab, config, rng, device_type=device_type)
+            X, Y = get_batch(split, train_datasets, val_datasets, vocab, config, rng, device_type=device_type, bpe_tokenizer=bpe_tokenizer)
             with ctx:
                 logits = model(X, Y)
                 loss = raw_model.last_loss
@@ -86,7 +105,7 @@ def train_model(config=None):
         out_dir = "out"
         rng = random.Random(config.seed)
         vocab = Vocab()
-        vocab_size = len(vocab) # 12515
+        vocab_size = config.vocab_size # len(vocab) # 12515
         lr_decay_iters = config.max_iters  # should be ~= max_iters per Chinchilla
         min_lr = 6e-5 / 10 # 0.0 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
         tokens_per_iter = config.gradient_accumulation_steps * config.batch_size * config.max_seq_len
@@ -119,6 +138,11 @@ def train_model(config=None):
         val_datasets = []
         for file in val_message_files:
             val_datasets.append(np.load(file, mmap_mode='r'))
+        # BPE encoding
+        if config.use_bpe:
+            # load the tokenizer
+            with open('tokenizer/bpe_tokenizer.pkl', 'rb') as f:
+                bpe_tokenizer = pkl.load(f)
         # verify sink token compatibility with dataloader implementation
         if config.use_sink:
             assert vocab.SINK_TOK == 1
@@ -158,7 +182,7 @@ def train_model(config=None):
             model = torch.compile(model)  # requires PyTorch 2.0
 
         # training loop
-        X, Y = get_batch('train', train_datasets, val_datasets, vocab, config, rng, device_type=device_type) # fetch the very first batch
+        X, Y = get_batch('train', train_datasets, val_datasets, vocab, config, rng, device_type=device_type, bpe_tokenizer=bpe_tokenizer) # fetch the very first batch
         t0 = time.time()
         local_iter_num = 0  # number of iterations in the lifetime of this process
         raw_model = model # keep a reference to the raw model
@@ -171,7 +195,7 @@ def train_model(config=None):
 
             # evaluate the loss on train/val sets and write checkpoints
             if iter_num % config.eval_interval == 0:
-                losses = estimate_loss(model, raw_model, ctx, train_datasets, val_datasets, vocab, config, rng, device_type=device_type)
+                losses = estimate_loss(model, raw_model, ctx, train_datasets, val_datasets, vocab, config, rng, device_type=device_type, bpe_tokenizer=bpe_tokenizer)
                 print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
                 try:
                     wandb.log(
@@ -210,7 +234,7 @@ def train_model(config=None):
                     loss = raw_model.last_loss
                     loss = loss / config.gradient_accumulation_steps # scale the loss to account for gradient accumulation
                 # immediately async prefetch next batch while model is doing the forward pass on the GPU
-                X, Y = get_batch('train', train_datasets, val_datasets, vocab, config, rng, device_type=device_type)
+                X, Y = get_batch('train', train_datasets, val_datasets, vocab, config, rng, device_type=device_type, bpe_tokenizer=bpe_tokenizer)
                 # backward pass, with gradient scaling if training in fp16
                 scaler.scale(loss).backward()
             # clip the gradient
