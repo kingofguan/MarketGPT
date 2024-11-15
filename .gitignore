@@ -2,6 +2,7 @@
 dataset/raw/*
 dataset/proc/*
 gen_data/*
+eval/empirical/*
 
 # Figures
 fig/*
@@ -17,3 +18,4 @@ wandb/*
 
 # Local packages
 causal-conv1d/*
+mamba/*

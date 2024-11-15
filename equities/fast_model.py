@@ -169,26 +169,12 @@ class KVCache:
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         bsz,T,nh,C = keys.shape
         if roll:
-            # print("rolling")
-            # self.key = torch.roll(self.key, -self.encoded_tok_len, dims=1)
-            # self.value = torch.roll(self.value, -self.encoded_tok_len, dims=1)
-            # print("self.key (before roll):", self.key.shape)
-            # print("self.value (before roll):", self.value.shape)
             sink_side_key = self.key[:, 0:self.sink_tokens, :, :]
-            # recent_side_key = self.key[:, (self.sink_tokens + self.encoded_tok_len - T):, :, :]
             recent_side_key = (self.key[:, self.sink_tokens:, :, :]).roll(-self.encoded_tok_len, dims=1)
-            # self.key = torch.cat((recent_side_key, sink_side_key), dim=1)
             self.key = torch.cat((sink_side_key, recent_side_key), dim=1)
-            # print("sink_side_key:", sink_side_key.shape)
-            # print("recent_side_key:", recent_side_key.shape)
             sink_side_value = self.value[:, 0:self.sink_tokens, :, :]
-            # recent_side_value = self.value[:, (self.sink_tokens + self.encoded_tok_len - T):, :, :]
             recent_side_value = (self.value[:, self.sink_tokens:, :, :]).roll(-self.encoded_tok_len, dims=1)
-            # self.value = torch.cat((recent_side_value, sink_side_value), dim=1)
             self.value = torch.cat((sink_side_value, recent_side_value), dim=1)
-        # if start_pos >= 10319:
-        #     print("start_pos:", start_pos)
-        #     print("self.key:", self.key.shape)
         self.key[:bsz, start_pos : start_pos + T] = keys
         self.value[:bsz, start_pos : start_pos + T] = values
         keys = self.key[:bsz, : start_pos + T]
@@ -254,12 +240,6 @@ class Attention(nn.Module):
             # apply relative positional embeddings (RoPE)
             xq = apply_rotary_emb_single(xq, freqs_cos, freqs_sin)
             freqs_cos_cache, freqs_sin_cache = freqs_cache
-            # if input_pos >= 10319:
-            #     print("freqs_cos_cache:", freqs_cos_cache.shape)
-            #     print("freqs_sin_cache:", freqs_sin_cache.shape)
-            #     print("xk:", xk.shape)
-            #     print("xq:", xq.shape)
-            #     print("-------------------")
             xk = apply_rotary_emb_single(xk, freqs_cos_cache, freqs_sin_cache)
 
         # grouped multiquery attention: expand out keys and values
@@ -418,7 +398,6 @@ class Transformer(nn.Module):
             assert max_seq_length is not None
             assert input_pos is not None
             if self.kv_cache[0] is None:
-                # shape = (_bsz,max_seq_length,self.params.n_heads,self.params.dim//self.params.n_heads)
                 shape = (_bsz,max_seq_length,self.params.n_kv_heads,self.params.dim//self.params.n_heads)
                 self.kv_cache = [KVCache(shape,max_seq_length,device=h.device,dtype=h.dtype) for _ in range(self.params.n_layers)]
         elif self.kv_cache[-1] is not None:
@@ -538,9 +517,14 @@ class Transformer(nn.Module):
                 Nucleus filtering is described in Holtzman et al. (http://arxiv.org/abs/1904.09751)
             start: bool, if True, the input is the start of a new sequence, otherwise it is a continuation
             roll: bool, if True, the input is the start of a rolling sequence and the KV cache is rolled
+            new_block_size: int, the new block size for the KV cache when rolling
+            vocab_encoding: dict, the encoding of the vocabulary
+            use_relevant_mask: bool, if True, mask out irrelevant tokens for the current field
+            use_bpe: bool, if True, use BPE encoding
+            eom_token_val: int, the end-of-message token value
+            roll_len: int, the length of the roll when using BPE encoding
         """
         B,T = idx.shape
-        # input_pos = 0
         input_pos = idx.shape[1] - 1
         for tok_pos in range(max_new_tokens):
             # if the sequence context is growing too long we must crop it at block_size
@@ -551,12 +535,9 @@ class Transformer(nn.Module):
             else:
                 x = idx_cond
                 input_pos = 0
-            # print("input_pos:", input_pos)
             if use_bpe and roll:
                 for kv_cache in self.kv_cache:
                     kv_cache.encoded_tok_len = roll_len + 1
-            # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=max_new_tokens, input_pos=input_pos)
-            # logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=self.params.max_seq_len, input_pos=input_pos, roll=roll)
             logits = self.forward(x, None, kv_cache=KVCACHE, max_seq_length=new_block_size, input_pos=input_pos, roll=roll)
             logits = logits[:, -1, :] # crop to just the final time step
             if temperature == 0.0: # greedy sampling:

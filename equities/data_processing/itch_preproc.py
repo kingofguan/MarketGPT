@@ -4,6 +4,10 @@ This code was built on the work of the authors of the paper "Generative AI for E
 The original code can be found at: https://github.com/peernagy/LOBS5/blob/main/lob/preproc.py
 
 I refactored the code to work with the ITCH datasets (with my custom fields) and the 'itch_encoding.py' file.
+
+!!!!! This file has been deprecated in favor of equities/data_processing/itch_multi_preproc.py,
+however, it may still be useful if you want a quick and easy way to process a few files that 
+you plug into /dataset/raw/ITCH/ manually !!!!!
 """
 
 from __future__ import annotations
@@ -23,30 +27,9 @@ import sys
 
 
 def load_message_df(m_f: str) -> pd.DataFrame:
-    # cols = ['time', 'event_type', 'order_id', 'size', 'price', 'direction']
-    # cols = ['time','type','id','side','size','price','cancSize','execSize','oldId','oldSize','oldPrice','mpid']
     messages = pd.read_csv(
         m_f,
-        # names=cols,
-        # usecols=cols,
-        # index_col=False,
-        # dtype={
-        #     #'time': 'float64',
-        #     'time': 'int32',
-        #     'type': str,
-        #     'id': 'int32',
-        #     'side': 'int32',
-        #     'size': 'int32',
-        #     'price': 'int32',
-        #     'cancSize': 'int32', # may be NaN
-        #     'execSize': 'int32', # may be NaN
-        #     'oldId': 'int32', # may be NaN
-        #     'oldSize': 'int32', # may be NaN
-        #     'oldPrice': 'int32', # may be NaN
-        #     'mpid': str # may be NaN
-        # }
     )
-    # messages.time = messages.time.apply(lambda x: Decimal(x))
     return messages
 
 
@@ -85,8 +68,6 @@ def process_message_files(
 
         book = pd.read_csv(
             b_f,
-            # index_col=False,
-            # header=None
         )
         assert len(messages) == len(book)
 
@@ -111,27 +92,6 @@ def process_message_files(
         # convert price to pennies from dollars
         messages['price'] = (messages['price'] * 100).astype('int')
         messages['oldPrice'] = (messages['oldPrice'] * 100) # make int after dealing with NaNs
-
-        # # convert replace 'R' events to cancel 'D' and add 'A' events
-        # rows_list = []
-        # for index, row in messages.iterrows():
-        #     if row['type'] == 'R':
-        #         # create cancel event..
-        #         order_elements = messages.loc[index]
-        #         cancel_dict = {'time': order_elements.time, 'type': 'D', 'id': (order_elements.oldId).astype('int'), 'side': order_elements.side, 'size': 0.0, 'price': (order_elements.oldPrice).astype('int'), 'cancSize': order_elements.oldSize, 'execSize': order_elements.execSize, 'oldId': order_elements.execSize, 'oldSize': order_elements.execSize, 'oldPrice': order_elements.execSize}
-        #         # ..add it to the list
-        #         rows_list.append(cancel_dict)
-                
-        #         # create add event..
-        #         add_dict = {'time': order_elements.time, 'type': 'A', 'id': (order_elements.id).astype('int'), 'side': order_elements.side, 'size': order_elements.size, 'price': (order_elements.price).astype('int'), 'cancSize': order_elements.execSize, 'execSize': order_elements.execSize, 'oldId': order_elements.execSize, 'oldSize': order_elements.execSize, 'oldPrice': order_elements.execSize}
-        #         # ..add it to the list
-        #         rows_list.append(add_dict)
-        #     else:
-        #         # add the original event to the list
-        #         rows_list.append(messages.loc[index].to_dict())
-        # # create a new dataframe from the list
-        # messages = pd.DataFrame(rows_list) # TODO: book files no longer match up with messages... need to fix this
-
         
         print('<< pre processing >>')
         m_ = tok.preproc(messages, book)
@@ -203,8 +163,6 @@ def process_book_files(
 
         book = pd.read_csv(
             b_f,
-            # index_col=False,
-            # header=None
         )
 
         # remove pre-market and after-market hours from ITCH data

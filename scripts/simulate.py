@@ -1,5 +1,5 @@
 """
-!!!!! depracated -> use notebooks/simulate.ipynb !!!!!
+!!!!! deprecated -> use notebooks/simulate.ipynb !!!!!
 """
 
 from os.path import dirname, abspath, join

@@ -9,8 +9,6 @@ I refactored the code to work with the ITCH datasets (with my custom fields), mu
 from typing import Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
-# import jax
-# from functools import partial
 
 
 NA_VAL = -9999
@@ -63,11 +61,6 @@ def split_field(x, n_tokens, tok_len, prepend_sign_token=False):
         return expand_special_val(x, total_tokens)
     else:
         return split_int(x, n_tokens, tok_len, prepend_sign_token)
-    # return jax.lax.cond(
-    #     is_special_val(x),
-    #     lambda arg: expand_special_val(arg, total_tokens),
-    #     lambda arg: split_int(arg, n_tokens, tok_len, prepend_sign_token),
-    #     x)
 
 def combine_field(
         x: np.array,
@@ -78,14 +71,7 @@ def combine_field(
         return NA_VAL
     else:
         return combine_int(x, tok_len, sign)
-    # return jax.lax.cond(
-    #     is_special_val(np.concatenate((sign.flatten(), x.flatten()))),
-    #     lambda arg: NA_VAL,
-    #     lambda arg: combine_int(arg, tok_len, sign),
-    #     x)
 
-# ticker	type	side	price	fill_size	remain_size	delta_t_s delta_t_ns	time_s	time_ns price_ref	size_ref	time_s_ref	time_ns_ref
-# TODO: REIMPLEMENT
 def encode_msg(
         msg: np.array,
         encoding: Dict[str, Tuple[np.array, np.array]],
@@ -113,11 +99,6 @@ def encode_msg(
         delta_t_ns = msg[9],
     )
 
-    # canc_size_ref = encode(msg[11], *encoding['size'])
-    # exec_size_ref = encode(msg[12], *encoding['size'])
-    # # NOTE: leave out oldID in msg[13]
-    # old_size_ref = encode(msg[14], *encoding['size'])
-
     # NOTE: leave out oldID in msg[12]
     price_ref = split_field(msg[13], 1, 3, True)
     # CAVE: temporary fix to switch tokens for + and - sign
@@ -133,9 +114,9 @@ def encode_msg(
     )
 
     out = [
-        ticker, event_type, direction, price_sign, price, fill_size, remain_size, time_comb, # delta_t, time_s, time_ns,
+        ticker, event_type, direction, price_sign, price, fill_size, remain_size, time_comb,
         price_ref_sign, price_ref, fill_size_ref, time_ref_comb]
-    return np.hstack(out) # time_s_ref, time_ns_ref])
+    return np.hstack(out)
 
 def encode_msgs(msgs, encoding):
     return np.array([encode_msg(msg, encoding) for msg in msgs])
@@ -160,7 +141,6 @@ def encode_time(
     return time_comb
 
 
-# TODO: REIMPLEMENT
 def decode_msg(msg_enc, encoding):
     # TODO: check if fields with same decoder can be combined into one decode call
 
@@ -178,10 +158,6 @@ def decode_msg(msg_enc, encoding):
     remain_size = decode(msg_enc[6], *encoding['size'])
 
     delta_t_s, delta_t_ns, time_s, time_ns = decode_time(msg_enc[7:16], encoding)
-
-    # canc_size_ref = decode(msg_enc[15], *encoding['size'])
-    # exec_size_ref = decode(msg_enc[16], *encoding['size'])
-    # old_size_ref = decode(msg_enc[17], *encoding['size'])
 
     price_ref_sign = decode(msg_enc[16], *encoding['sign'])
     price_ref = decode(msg_enc[17], *encoding['price'])
@@ -231,7 +207,6 @@ def repr_raw_msg(msg):
         out += name + ":\t" + str(val) + "\n"
     return out
 
-# TODO: REIMPLEMENT
 class Vocab:
 
     MASK_TOK = 0
@@ -478,9 +453,6 @@ class Message_Tokenizer:
                 modif_fields=['price', 'fill_size', 'time_s', 'time_ns'])
         
         # change column order
-        # m = m[['id', 'type', 'side', 'price_abs', 'price', 'size',
-        #        'delta_t_s', 'delta_t_ns', 'time_s', 'time_ns',
-        #        'cancSize', 'execSize', 'oldId', 'oldSize', 'oldPrice']]
         m = m.rename(columns={'oldId': 'old_id'})
         if not is_multi:
             m = m[['id', 'type', 'side', 'price_abs', 'price',
@@ -496,7 +468,6 @@ class Message_Tokenizer:
 
         assert len(m) + 1 == len(b), "length of messages (-1) and book states don't align"
 
-        # TODO: prepend column with ticker ID
         return m.values
 
     def _preproc_prices(self, p, p_ref, p_lower_trunc=-10, p_upper_trunc=13):
@@ -506,7 +477,7 @@ class Message_Tokenizer:
         """
         # encode prices relative to (previous) reference price
         p = p - p_ref
-        log_path = '/home/aaron/Documents/Github/MarketSimT/log/data_price_trunc_metrics.txt'
+        log_path = '/home/aaron/Documents/Github/MarketSimT/log/data_price_trunc_metrics.txt' # TODO: automate this
         outfile = open(log_path, 'a')
         # truncate price at deviation of x
         # min tick is 100, hence min 10-level diff is 900
@@ -602,7 +573,6 @@ class Message_Tokenizer:
             representing them as the original message and new columns containing
             the order modification details.
             This effectively does the lookup step in past data.
-            TODO: lookup missing original message data from previous days' data?
         """
 
         # make df that converts 'R' values to 'A' values so that we can reference add order component of replace orders

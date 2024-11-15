@@ -23,30 +23,9 @@ import sys
 
 
 def load_message_df(m_f: str) -> pd.DataFrame:
-    # cols = ['time', 'event_type', 'order_id', 'size', 'price', 'direction']
-    # cols = ['time','type','id','side','size','price','cancSize','execSize','oldId','oldSize','oldPrice','mpid']
     messages = pd.read_csv(
         m_f,
-        # names=cols,
-        # usecols=cols,
-        # index_col=False,
-        # dtype={
-        #     #'time': 'float64',
-        #     'time': 'int32',
-        #     'type': str,
-        #     'id': 'int32',
-        #     'side': 'int32',
-        #     'size': 'int32',
-        #     'price': 'int32',
-        #     'cancSize': 'int32', # may be NaN
-        #     'execSize': 'int32', # may be NaN
-        #     'oldId': 'int32', # may be NaN
-        #     'oldSize': 'int32', # may be NaN
-        #     'oldPrice': 'int32', # may be NaN
-        #     'mpid': str # may be NaN
-        # }
     )
-    # messages.time = messages.time.apply(lambda x: Decimal(x))
     return messages
 
 def process_message_files(
@@ -196,27 +175,6 @@ def process_message_files_merge(
     for path in message_files:
         print(path[0])
 
-    # for m_f, b_f in tqdm(zip(message_files, book_files)):
-    #     print(m_f)
-    #     m_path = save_dir + m_f.rsplit('/', maxsplit=1)[-1][:-4] + '_proc.npy'
-    #     symbol = m_f.rsplit('/', maxsplit=1)[-1][:-12].rsplit('_', maxsplit=1)[-1]
-    #     if skip_existing and Path(m_path).exists():
-    #         print('skipping', m_path)
-    #         continue
-        
-    #     messages = load_message_df(m_f)
-
-    #     book = pd.read_csv(
-    #         b_f,
-    #         # index_col=False,
-    #         # header=None
-    #     )
-    #     assert len(messages) == len(book)
-
-    #     if filter_above_lvl:
-    #         book = book.iloc[:, :filter_above_lvl * 4 + 1]
-    #         messages, book = filter_by_lvl(messages, book, filter_above_lvl)
-
     # remove mpid field from ITCH data
     messages = messages.drop(columns=['mpid'])
 
@@ -237,10 +195,6 @@ def process_message_files_merge(
     
     print('<< pre processing >>')
     m_ = tok.preproc(messages, books, is_multi=True)
-
-    # # prepend column with ticker ID
-    # ticker_id = tickers[symbol]
-    # m_ = np.concatenate([np.full((m_.shape[0], 1), ticker_id), m_], axis=1)
 
     # save processed messages
     np.save(m_path, m_)
@@ -305,8 +259,6 @@ def process_book_files(
 
         book = pd.read_csv(
             b_f,
-            # index_col=False,
-            # header=None
         )
 
         # remove pre-market and after-market hours from ITCH data
@@ -428,7 +380,7 @@ if __name__ == '__main__':
 
     # append the list of available dates from the data directory
     for f in os.listdir(msg_load_path):
-        # if f != '12302019':
+        # if f != '12302019': # for testing
         #     continue
         dates.append(f)
 
@@ -440,7 +392,7 @@ if __name__ == '__main__':
         # append the list of available assets (tickers) from the dates directory
         assets = []
         for f in os.listdir(msg_date_load_path):
-            # if f == 'AMZN':
+            # if f == 'AMZN': # doesn't work well
             #     continue
             assets.append(f)
 

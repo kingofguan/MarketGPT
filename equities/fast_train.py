@@ -155,14 +155,14 @@ ctx = (
 # train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/train/')
 # train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/train/')
 # train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/pre_train/')
-# train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/train/')
+# train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/train/') # same AAPL data that was used for pre-training (only exclusive AAPL data)
 train_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/SPY/train/')
 train_message_files = sorted(glob(str(train_data_dir) + '/*message*.npy'))
 assert len(train_message_files) > 0, f'no message files found in {train_data_dir}'
 # val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/val/')
 # val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/five_assets/val/')
 # val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/pre_train/val/')
-# val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/val/')
+# val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/AAPL/val/') # this was not used in pre-training
 val_data_dir = os.path.join(os.path.abspath(''), 'dataset/proc/ITCH/multi/fine_tune/SPY/val/')
 val_message_files = sorted(glob(str(val_data_dir) + '/*message*.npy'))
 assert len(val_message_files) > 0, f'no message files found in {val_data_dir}'

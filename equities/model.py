@@ -1,5 +1,5 @@
 """
-!!!!! depracated -> use equities/fast_model.py !!!!!
+!!!!! deprecated -> use equities/fast_model.py !!!!!
 
 
 This code is based on nanoGPT by Karpathy: https://github.com/karpathy/nanoGPT

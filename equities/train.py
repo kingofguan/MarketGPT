@@ -1,5 +1,5 @@
 """
-!!!!! depracated -> use equities/fast_train.py !!!!!
+!!!!! deprecated -> use equities/fast_train.py !!!!!
 
 
 This script is based on nanoGPT by Karpathy: https://github.com/karpathy/nanoGPT
