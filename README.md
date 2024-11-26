@@ -3,7 +3,7 @@ This repository provides the implementation for the paper:
 
 > **MarketGPT: Developing a Pre-trained transformer (GPT) for Modeling Financial Time Series**\
 > Aaron Wheeler, Jeffrey D. Varner\
-> arXiv (insert link here)
+> arXiv preprint: https://arxiv.org/abs/2411.16585
 ![MGPT](assets/MGPT_platform_schematic_edit.png)
 
 
@@ -71,7 +71,15 @@ Experiments were conducted using the `notebooks/simulate.ipynb` file. This file 
 ## Citation
 
 Please use the following to cite our work:
-
-Insert citation here.
+```
+@article{wheeler2024,
+  url = {https://arxiv.org/abs/2411.16585},
+  author = {Aaron Wheeler and Jeffrey D. Varner},
+  title = {MarketGPT: Developing a Pre-trained transformer (GPT) for Modeling Financial Time Series},
+  publisher = {arXiv},
+  year = {2024},
+  copyright = {Creative Commons Attribution 4.0 International}
+}
+```
 
 Please reach out if you have any questions.
